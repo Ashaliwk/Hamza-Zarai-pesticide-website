@@ -40,6 +40,30 @@ INSERT INTO categories (name, type) VALUES
 ('Pesticides', 'default');
 
 -- ------------------------------------------------------------
+-- Subcategories
+-- ------------------------------------------------------------
+CREATE TABLE subcategories (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    category_id INT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+);
+
+INSERT INTO subcategories (category_id, name) VALUES
+(1, 'Nitrogenous Fertilizers'),
+(1, 'Phosphate Fertilizers'),
+(1, 'Organic Manure'),
+(2, 'Fungicide Spray'),
+(2, 'Weedicide Spray'),
+(3, 'Hybrid Seeds'),
+(3, 'Crop Seeds'),
+(4, 'Liquid Insecticide'),
+(4, 'Powder Insecticide'),
+(5, 'Systemic Pesticide');
+
+
+-- ------------------------------------------------------------
 -- Products
 -- ------------------------------------------------------------
 CREATE TABLE products (
