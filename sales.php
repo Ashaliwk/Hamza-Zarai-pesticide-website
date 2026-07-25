@@ -6,13 +6,26 @@ require_login();
 $pageTitle = 'Sales';
 $activeNav = 'sales';
 
+$search = trim($_GET['search'] ?? '');
+
 $products = $pdo->query("SELECT id, name, selling_price, quantity, unit FROM products ORDER BY name")->fetchAll();
 
-$sales = $pdo->query("
-    SELECT s.*, p.name AS product_name
-    FROM sales s JOIN products p ON p.id = s.product_id
-    ORDER BY s.sale_date DESC, s.id DESC
-")->fetchAll();
+if ($search !== '') {
+    $stmt = $pdo->prepare("
+        SELECT s.*, p.name AS product_name
+        FROM sales s JOIN products p ON p.id = s.product_id
+        WHERE p.name LIKE :s OR s.customer_name LIKE :s OR s.sale_date LIKE :s
+        ORDER BY s.sale_date DESC, s.id DESC
+    ");
+    $stmt->execute([':s' => "%$search%"]);
+    $sales = $stmt->fetchAll();
+} else {
+    $sales = $pdo->query("
+        SELECT s.*, p.name AS product_name
+        FROM sales s JOIN products p ON p.id = s.product_id
+        ORDER BY s.sale_date DESC, s.id DESC
+    ")->fetchAll();
+}
 
 require_once 'includes/header.php';
 ?>
@@ -28,6 +41,16 @@ require_once 'includes/header.php';
 </div>
 
 <div class="panel">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div class="search-box position-relative" style="max-width: 320px; width: 100%;">
+      <i class="fa-solid fa-magnifying-glass search-icon"></i>
+      <input type="text" id="salesSearch" class="form-control search-input" placeholder="Search product, customer, date..." value="<?= e($search) ?>" autocomplete="off">
+      <button class="search-clear-btn" id="clearSalesSearch" type="button" style="display: <?= $search !== '' ? 'flex' : 'none' ?>;"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="text-muted small" id="salesCount">
+      <?= count($sales) ?> sale<?= count($sales) === 1 ? '' : 's' ?> found
+    </div>
+  </div>
   <div class="table-responsive">
   <table class="table table-clean mb-0">
     <thead>
@@ -43,10 +66,11 @@ require_once 'includes/header.php';
     </thead>
     <tbody>
       <?php if (!$sales): ?>
-        <tr><td colspan="7" class="text-center text-muted py-4">No sales recorded yet.</td></tr>
+        <tr><td colspan="7" class="text-center text-muted py-4">No sales found.</td></tr>
       <?php endif; ?>
+      <tr id="noMatchSalesRow" style="display:none;"><td colspan="7" class="text-center text-muted py-4">No matching sales recorded.</td></tr>
       <?php foreach ($sales as $s): ?>
-      <tr>
+      <tr class="sale-row">
         <td><?= date('n/j/Y', strtotime($s['sale_date'])) ?></td>
         <td><?= e($s['product_name']) ?></td>
         <td><?= e($s['customer_name']) ?></td>
@@ -198,6 +222,46 @@ document.getElementById("editSaleModal")?.addEventListener("show.bs.modal", func
   document.getElementById("edit_sale_price").value = btn.dataset.price;
   document.getElementById("edit_sale_date").value = btn.dataset.date;
 });
+
+const salesInput = document.getElementById("salesSearch");
+const clearSalesBtn = document.getElementById("clearSalesSearch");
+const salesRows = document.querySelectorAll("tbody tr.sale-row");
+const salesCount = document.getElementById("salesCount");
+const noMatchSalesRow = document.getElementById("noMatchSalesRow");
+
+function filterSales() {
+  const query = salesInput.value.toLowerCase().trim();
+  clearSalesBtn.style.display = query.length > 0 ? "flex" : "none";
+  
+  let visibleCount = 0;
+  salesRows.forEach(row => {
+    const text = row.innerText.toLowerCase();
+    if (text.includes(query)) {
+      row.style.display = "";
+      visibleCount++;
+    } else {
+      row.style.display = "none";
+    }
+  });
+
+  if (salesCount) {
+    salesCount.textContent = visibleCount + (visibleCount === 1 ? " sale found" : " sales found");
+  }
+  
+  if (noMatchSalesRow) {
+    noMatchSalesRow.style.display = (visibleCount === 0 && salesRows.length > 0) ? "" : "none";
+  }
+}
+
+if (salesInput) {
+  salesInput.addEventListener("input", filterSales);
+  clearSalesBtn.addEventListener("click", function() {
+    salesInput.value = "";
+    filterSales();
+    salesInput.focus();
+  });
+}
 </script>';
 require_once 'includes/footer.php';
 ?>
+

@@ -6,13 +6,26 @@ require_login();
 $pageTitle = 'Purchases';
 $activeNav = 'purchases';
 
+$search = trim($_GET['search'] ?? '');
+
 $products = $pdo->query("SELECT id, name, purchase_price, unit FROM products ORDER BY name")->fetchAll();
 
-$purchases = $pdo->query("
-    SELECT pu.*, p.name AS product_name
-    FROM purchases pu JOIN products p ON p.id = pu.product_id
-    ORDER BY pu.purchase_date DESC, pu.id DESC
-")->fetchAll();
+if ($search !== '') {
+    $stmt = $pdo->prepare("
+        SELECT pu.*, p.name AS product_name
+        FROM purchases pu JOIN products p ON p.id = pu.product_id
+        WHERE p.name LIKE :s OR pu.supplier_name LIKE :s OR pu.purchase_date LIKE :s
+        ORDER BY pu.purchase_date DESC, pu.id DESC
+    ");
+    $stmt->execute([':s' => "%$search%"]);
+    $purchases = $stmt->fetchAll();
+} else {
+    $purchases = $pdo->query("
+        SELECT pu.*, p.name AS product_name
+        FROM purchases pu JOIN products p ON p.id = pu.product_id
+        ORDER BY pu.purchase_date DESC, pu.id DESC
+    ")->fetchAll();
+}
 
 require_once 'includes/header.php';
 ?>
@@ -28,6 +41,16 @@ require_once 'includes/header.php';
 </div>
 
 <div class="panel">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div class="search-box position-relative" style="max-width: 320px; width: 100%;">
+      <i class="fa-solid fa-magnifying-glass search-icon"></i>
+      <input type="text" id="purchasesSearch" class="form-control search-input" placeholder="Search product, supplier, date..." value="<?= e($search) ?>" autocomplete="off">
+      <button class="search-clear-btn" id="clearPurchasesSearch" type="button" style="display: <?= $search !== '' ? 'flex' : 'none' ?>;"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="text-muted small" id="purchasesCount">
+      <?= count($purchases) ?> purchase<?= count($purchases) === 1 ? '' : 's' ?> found
+    </div>
+  </div>
   <div class="table-responsive">
   <table class="table table-clean mb-0">
     <thead>
@@ -43,10 +66,11 @@ require_once 'includes/header.php';
     </thead>
     <tbody>
       <?php if (!$purchases): ?>
-        <tr><td colspan="7" class="text-center text-muted py-4">No purchases recorded yet.</td></tr>
+        <tr><td colspan="7" class="text-center text-muted py-4">No purchases found.</td></tr>
       <?php endif; ?>
+      <tr id="noMatchPurchasesRow" style="display:none;"><td colspan="7" class="text-center text-muted py-4">No matching purchases recorded.</td></tr>
       <?php foreach ($purchases as $p): ?>
-      <tr>
+      <tr class="purchase-row">
         <td><?= date('n/j/Y', strtotime($p['purchase_date'])) ?></td>
         <td><?= e($p['product_name']) ?></td>
         <td><?= e($p['supplier_name']) ?></td>
@@ -182,6 +206,46 @@ document.getElementById("editPurchaseModal")?.addEventListener("show.bs.modal", 
   document.getElementById("edit_purchase_price").value = btn.dataset.price;
   document.getElementById("edit_purchase_date").value = btn.dataset.date;
 });
+
+const purchasesInput = document.getElementById("purchasesSearch");
+const clearPurchasesBtn = document.getElementById("clearPurchasesSearch");
+const purchaseRows = document.querySelectorAll("tbody tr.purchase-row");
+const purchasesCount = document.getElementById("purchasesCount");
+const noMatchPurchasesRow = document.getElementById("noMatchPurchasesRow");
+
+function filterPurchases() {
+  const query = purchasesInput.value.toLowerCase().trim();
+  clearPurchasesBtn.style.display = query.length > 0 ? "flex" : "none";
+  
+  let visibleCount = 0;
+  purchaseRows.forEach(row => {
+    const text = row.innerText.toLowerCase();
+    if (text.includes(query)) {
+      row.style.display = "";
+      visibleCount++;
+    } else {
+      row.style.display = "none";
+    }
+  });
+
+  if (purchasesCount) {
+    purchasesCount.textContent = visibleCount + (visibleCount === 1 ? " purchase found" : " purchases found");
+  }
+  
+  if (noMatchPurchasesRow) {
+    noMatchPurchasesRow.style.display = (visibleCount === 0 && purchaseRows.length > 0) ? "" : "none";
+  }
+}
+
+if (purchasesInput) {
+  purchasesInput.addEventListener("input", filterPurchases);
+  clearPurchasesBtn.addEventListener("click", function() {
+    purchasesInput.value = "";
+    filterPurchases();
+    purchasesInput.focus();
+  });
+}
 </script>';
 require_once 'includes/footer.php';
 ?>
+

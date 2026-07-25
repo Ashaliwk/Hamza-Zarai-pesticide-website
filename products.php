@@ -6,14 +6,28 @@ require_login();
 $pageTitle = 'Products';
 $activeNav = 'products';
 
+$search = trim($_GET['search'] ?? '');
+
 $categories = $pdo->query("SELECT * FROM categories ORDER BY name")->fetchAll();
 
-$products = $pdo->query("
-    SELECT p.*, c.name AS category_name
-    FROM products p
-    JOIN categories c ON c.id = p.category_id
-    ORDER BY p.created_at DESC
-")->fetchAll();
+if ($search !== '') {
+    $stmt = $pdo->prepare("
+        SELECT p.*, c.name AS category_name
+        FROM products p
+        JOIN categories c ON c.id = p.category_id
+        WHERE p.name LIKE :s OR p.sku LIKE :s OR c.name LIKE :s
+        ORDER BY p.created_at DESC
+    ");
+    $stmt->execute([':s' => "%$search%"]);
+    $products = $stmt->fetchAll();
+} else {
+    $products = $pdo->query("
+        SELECT p.*, c.name AS category_name
+        FROM products p
+        JOIN categories c ON c.id = p.category_id
+        ORDER BY p.created_at DESC
+    ")->fetchAll();
+}
 
 require_once 'includes/header.php';
 ?>
@@ -29,6 +43,16 @@ require_once 'includes/header.php';
 </div>
 
 <div class="panel">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div class="search-box position-relative" style="max-width: 320px; width: 100%;">
+      <i class="fa-solid fa-magnifying-glass search-icon"></i>
+      <input type="text" id="productSearch" class="form-control search-input" placeholder="Search product or category..." value="<?= e($search) ?>" autocomplete="off">
+      <button class="search-clear-btn" id="clearSearch" type="button" style="display: <?= $search !== '' ? 'flex' : 'none' ?>;"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="text-muted small" id="searchCount">
+      <?= count($products) ?> product<?= count($products) === 1 ? '' : 's' ?> found
+    </div>
+  </div>
   <div class="table-responsive">
   <table class="table table-clean mb-0">
     <thead>
@@ -44,15 +68,16 @@ require_once 'includes/header.php';
     </thead>
     <tbody>
       <?php if (!$products): ?>
-        <tr><td colspan="7" class="text-center text-muted py-4">No products yet. Click "Add Product" to create one.</td></tr>
+        <tr><td colspan="7" class="text-center text-muted py-4">No products found.</td></tr>
       <?php endif; ?>
+      <tr id="noMatchRow" style="display:none;"><td colspan="7" class="text-center text-muted py-4">No matching products found.</td></tr>
       <?php foreach ($products as $p):
           $margin = $p['purchase_price'] > 0
               ? (($p['selling_price'] - $p['purchase_price']) / $p['purchase_price']) * 100
               : 0;
           $isLow = $p['quantity'] <= $p['low_stock_threshold'];
       ?>
-      <tr>
+      <tr class="product-row">
         <td>
           <div class="fw-semibold"><?= e($p['name']) ?></div>
           <div class="text-muted small"><?= e($p['sku']) ?></div>
@@ -144,6 +169,46 @@ document.getElementById("editProductModal").addEventListener("show.bs.modal", fu
   document.getElementById("edit_quantity").value = btn.dataset.qty;
   document.getElementById("edit_low_stock_threshold").value = btn.dataset.threshold;
 });
+
+const searchInput = document.getElementById("productSearch");
+const clearBtn = document.getElementById("clearSearch");
+const tableRows = document.querySelectorAll("tbody tr.product-row");
+const searchCount = document.getElementById("searchCount");
+const noMatchRow = document.getElementById("noMatchRow");
+
+function filterProducts() {
+  const query = searchInput.value.toLowerCase().trim();
+  clearBtn.style.display = query.length > 0 ? "flex" : "none";
+
+  let visibleCount = 0;
+  tableRows.forEach(row => {
+    const text = row.innerText.toLowerCase();
+    if (text.includes(query)) {
+      row.style.display = "";
+      visibleCount++;
+    } else {
+      row.style.display = "none";
+    }
+  });
+
+  if (searchCount) {
+    searchCount.textContent = visibleCount + (visibleCount === 1 ? " product found" : " products found");
+  }
+
+  if (noMatchRow) {
+    noMatchRow.style.display = (visibleCount === 0 && tableRows.length > 0) ? "" : "none";
+  }
+}
+
+if (searchInput) {
+  searchInput.addEventListener("input", filterProducts);
+  clearBtn.addEventListener("click", function() {
+    searchInput.value = "";
+    filterProducts();
+    searchInput.focus();
+  });
+}
 </script>';
 require_once 'includes/footer.php';
 ?>
+

@@ -6,7 +6,8 @@ require_login();
 $pageTitle = 'Categories';
 $activeNav = 'categories';
 
-$categories = $pdo->query("SELECT * FROM categories ORDER BY type DESC, name")->fetchAll();
+
+    $categories = $pdo->query("SELECT * FROM categories ORDER BY type DESC, name")->fetchAll();
 
 require_once 'includes/header.php';
 ?>
@@ -21,9 +22,13 @@ require_once 'includes/header.php';
   </button>
 </div>
 
-<div class="row g-3">
+<div class="row g-3" id="categoriesGrid">
+  <?php if (!$categories): ?>
+    <div class="col-12 text-center text-muted py-4">No categories found.</div>
+  <?php endif; ?>
+  <div id="noMatchCategory" class="col-12 text-center text-muted py-4" style="display:none;">No matching categories found.</div>
   <?php foreach ($categories as $c): ?>
-    <div class="col-md-4">
+    <div class="col-md-4 category-item">
       <div class="cat-card">
         <div class="cat-icon"><i class="fa-solid fa-layer-group"></i></div>
         <div>
@@ -63,4 +68,47 @@ require_once 'includes/header.php';
   </div>
 </div>
 
-<?php require_once 'includes/footer.php'; ?>
+<?php
+$extraScripts = '<script>
+const catInput = document.getElementById("categorySearch");
+const clearCatBtn = document.getElementById("clearCategorySearch");
+const catItems = document.querySelectorAll(".category-item");
+const catCount = document.getElementById("categoryCount");
+const noMatchCat = document.getElementById("noMatchCategory");
+
+function filterCategories() {
+  const query = catInput.value.toLowerCase().trim();
+  clearCatBtn.style.display = query.length > 0 ? "flex" : "none";
+
+  let visibleCount = 0;
+  catItems.forEach(item => {
+    const text = item.innerText.toLowerCase();
+    if (text.includes(query)) {
+      item.style.display = "";
+      visibleCount++;
+    } else {
+      item.style.display = "none";
+    }
+  });
+
+  if (catCount) {
+    catCount.textContent = visibleCount + (visibleCount === 1 ? " category found" : " categories found");
+  }
+
+  if (noMatchCat) {
+    noMatchCat.style.display = (visibleCount === 0 && catItems.length > 0) ? "block" : "none";
+  }
+}
+
+if (catInput) {
+  catInput.addEventListener("input", filterCategories);
+  clearCatBtn.addEventListener("click", function() {
+    catInput.value = "";
+    filterCategories();
+    catInput.focus();
+  });
+}
+</script>';
+require_once 'includes/footer.php';
+?>
+

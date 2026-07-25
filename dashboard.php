@@ -90,15 +90,37 @@ require_once 'includes/header.php';
       <div class="stat-icon icon-green"><i class="fa-solid fa-cart-shopping"></i></div>
     </div>
   </div>
-  <div class="col-6 col-lg-3">
+ <div class="col-6 col-lg-3">
     <div class="stat-card d-flex justify-content-between align-items-start">
-      <div>
-        <div class="stat-label">Total Profit</div>
-        <div class="stat-value"><?= money($totalProfit) ?></div>
-      </div>
-      <div class="stat-icon icon-purple"><i class="fa-solid fa-arrow-trend-up"></i></div>
+        <div>
+            <div class="stat-label">Total Profit</div>
+
+            <!-- Hidden Profit -->
+            <div class="stat-value" id="profitAmount" data-value="<?= money($totalProfit) ?>" onclick="toggleProfit()" style="cursor:pointer;">
+                ****** <i class="fa-solid fa-eye"></i>
+            </div>
+        </div>
+
+        <div class="stat-icon icon-purple">
+            <i class="fa-solid fa-arrow-trend-up"></i>
+        </div>
     </div>
-  </div>
+</div>
+
+<script>
+    let profitVisible = false;
+    function toggleProfit() {
+        const profit = document.getElementById('profitAmount');
+
+        if (profitVisible) {
+            profit.innerHTML = '****** <i class="fa-solid fa-eye"></i>';
+        } else {
+            profit.innerHTML = profit.dataset.value + ' <i class="fa-solid fa-eye-slash"></i>';
+        }
+
+        profitVisible = !profitVisible;
+    }
+</script>
   <div class="col-6 col-lg-3">
     <div class="stat-card d-flex justify-content-between align-items-start">
       <div>
