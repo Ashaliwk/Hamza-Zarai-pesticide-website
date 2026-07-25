@@ -16,7 +16,15 @@ $totalProfit = $pdo->query("
     FROM sales s JOIN products p ON p.id = s.product_id
 ")->fetchColumn();
 
-$lowStock = $pdo->query("SELECT COUNT(*) FROM products WHERE quantity <= low_stock_threshold")->fetchColumn();
+$lowStockProducts = $pdo->query("
+    SELECT p.*, c.name AS category_name
+    FROM products p
+    LEFT JOIN categories c ON c.id = p.category_id
+    WHERE p.quantity <= p.low_stock_threshold
+    ORDER BY p.quantity ASC
+")->fetchAll();
+
+$lowStock = count($lowStockProducts);
 
 // ---- Top products by sales quantity ----
 $topProducts = $pdo->query("
@@ -97,7 +105,7 @@ require_once 'includes/header.php';
 
             <!-- Hidden Profit -->
             <div class="stat-value" id="profitAmount" data-value="<?= money($totalProfit) ?>" onclick="toggleProfit()" style="cursor:pointer;">
-                ****** <i class="fa-solid fa-eye"></i>
+                ******
             </div>
         </div>
 
@@ -113,19 +121,26 @@ require_once 'includes/header.php';
         const profit = document.getElementById('profitAmount');
 
         if (profitVisible) {
-            profit.innerHTML = '****** <i class="fa-solid fa-eye"></i>';
+            profit.innerHTML = '****** ';
         } else {
-            profit.innerHTML = profit.dataset.value + ' <i class="fa-solid fa-eye-slash"></i>';
+            profit.innerHTML = profit.dataset.value ;
         }
 
         profitVisible = !profitVisible;
     }
 </script>
   <div class="col-6 col-lg-3">
-    <div class="stat-card d-flex justify-content-between align-items-start">
+    <div class="stat-card d-flex justify-content-between align-items-start position-relative"
+         style="cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease;"
+         data-bs-toggle="modal"
+         data-bs-target="#lowStockModal"
+         title="Click to view low stock items">
       <div>
         <div class="stat-label">Low Stock Items</div>
-        <div class="stat-value"><?= (int)$lowStock ?></div>
+        <div class="stat-value text-danger"><?= (int)$lowStock ?></div>
+        <div class="text-muted small mt-1" style="font-size: 0.76rem;">
+          <i class="fa-solid fa-list-ul me-1 text-warning"></i>Click to view items
+        </div>
       </div>
       <div class="stat-icon icon-orange"><i class="fa-solid fa-triangle-exclamation"></i></div>
     </div>
@@ -161,6 +176,77 @@ require_once 'includes/header.php';
   </div>
 </div>
 
+<!-- Low Stock Items Modal -->
+<div class="modal fade" id="lowStockModal" tabindex="-1" aria-labelledby="lowStockModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-bottom-0 pb-0">
+        <h5 class="modal-title fw-bold text-dark d-flex align-items-center gap-2" id="lowStockModalLabel">
+          <span class="badge bg-warning-subtle text-warning-emphasis p-2 rounded-3">
+            <i class="fa-solid fa-triangle-exclamation text-warning fs-5"></i>
+          </span>
+          Low Stock Products
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body pt-3">
+        <?php if (!$lowStockProducts): ?>
+          <div class="text-center text-muted py-5">
+            <i class="fa-solid fa-circle-check text-success fa-3x mb-3"></i>
+            <h6 class="fw-bold">No Low Stock Items</h6>
+            <p class="small text-muted mb-0">All products have sufficient quantity in stock.</p>
+          </div>
+        <?php else: ?>
+          <p class="text-muted small mb-3">The following products are at or below their low stock threshold:</p>
+          <div class="table-responsive">
+            <table class="table table-clean align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Category</th>
+                  <th>Current Quantity</th>
+                  <th>Threshold</th>
+                  <th class="text-end">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <?php foreach ($lowStockProducts as $lp): ?>
+                  <tr>
+                    <td>
+                      <div class="fw-bold text-dark"><?= e($lp['name']) ?></div>
+                      <div class="text-muted small"><?= e($lp['sku']) ?></div>
+                    </td>
+                    <td>
+                      <span class="badge-cat"><?= e($lp['category_name'] ?: 'Uncategorized') ?></span>
+                    </td>
+                    <td>
+                      <span class="fw-bold text-danger">
+                        <?= rtrim(rtrim(number_format($lp['quantity'], 2), '0'), '.') ?> <?= e($lp['unit']) ?>
+                      </span>
+                    </td>
+                    <td class="text-muted">
+                      <?= rtrim(rtrim(number_format($lp['low_stock_threshold'], 2), '0'), '.') ?> <?= e($lp['unit']) ?>
+                    </td>
+                    <td class="text-end">
+                      <a href="purchases.php" class="btn btn-sm btn-brand fw-semibold">
+                        <i class="fa-solid fa-cart-plus me-1"></i> Restock
+                      </a>
+                    </td>
+                  </tr>
+                <?php endforeach; ?>
+              </tbody>
+            </table>
+          </div>
+        <?php endif; ?>
+      </div>
+      <div class="modal-footer border-top-0 pt-0">
+        <a href="products.php" class="btn btn-light fw-semibold text-muted">View All Products</a>
+        <button type="button" class="btn btn-brand" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <?php
 $extraScripts = '<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
@@ -185,3 +271,4 @@ new Chart(ctx, {
 </script>';
 require_once 'includes/footer.php';
 ?>
+
