@@ -6,25 +6,39 @@ require_login();
 $pageTitle = 'Products';
 $activeNav = 'products';
 
+// Ensure subcategory_id column exists in products table
+try {
+    $pdo->exec("ALTER TABLE products ADD COLUMN subcategory_id INT NULL AFTER category_id");
+} catch (PDOException $e) {}
+
 $search = trim($_GET['search'] ?? '');
 
 $categories = $pdo->query("SELECT * FROM categories ORDER BY name")->fetchAll();
 
+$subcategories = $pdo->query("
+    SELECT s.*, c.name AS category_name
+    FROM subcategories s
+    JOIN categories c ON c.id = s.category_id
+    ORDER BY c.name, s.name
+")->fetchAll();
+
 if ($search !== '') {
     $stmt = $pdo->prepare("
-        SELECT p.*, c.name AS category_name
+        SELECT p.*, c.name AS category_name, sc.name AS subcategory_name
         FROM products p
         JOIN categories c ON c.id = p.category_id
-        WHERE p.name LIKE :s OR p.sku LIKE :s OR c.name LIKE :s
+        LEFT JOIN subcategories sc ON sc.id = p.subcategory_id
+        WHERE p.name LIKE :s OR p.sku LIKE :s OR c.name LIKE :s OR sc.name LIKE :s
         ORDER BY p.created_at DESC
     ");
     $stmt->execute([':s' => "%$search%"]);
     $products = $stmt->fetchAll();
 } else {
     $products = $pdo->query("
-        SELECT p.*, c.name AS category_name
+        SELECT p.*, c.name AS category_name, sc.name AS subcategory_name
         FROM products p
         JOIN categories c ON c.id = p.category_id
+        LEFT JOIN subcategories sc ON sc.id = p.subcategory_id
         ORDER BY p.created_at DESC
     ")->fetchAll();
 }
@@ -32,21 +46,26 @@ if ($search !== '') {
 require_once 'includes/header.php';
 ?>
 
-<div class="d-flex justify-content-between align-items-start mb-1">
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
   <div>
     <h1 class="page-title">Products</h1>
-    <p class="page-subtitle">Manage your product inventory</p>
+    <p class="page-subtitle">Manage your product inventory & subcategories</p>
   </div>
-  <button class="btn btn-brand fw-semibold" data-bs-toggle="modal" data-bs-target="#addProductModal">
-    <i class="fa-solid fa-plus me-1"></i> Add Product
-  </button>
+  <div class="d-flex gap-2">
+    <!-- <button class="btn btn-outline-success fw-semibold" data-bs-toggle="modal" data-bs-target="#addProductSubCategoryModal">
+      <i class="fa-solid fa-folder-plus me-1"></i> Add Subcategory
+    </button> -->
+    <button class="btn btn-brand fw-semibold" data-bs-toggle="modal" data-bs-target="#addProductModal">
+      <i class="fa-solid fa-plus me-1"></i> Add Product
+    </button>
+  </div>
 </div>
 
 <div class="panel">
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <div class="search-box position-relative" style="max-width: 320px; width: 100%;">
       <i class="fa-solid fa-magnifying-glass search-icon"></i>
-      <input type="text" id="productSearch" class="form-control search-input" placeholder="Search product or category..." value="<?= e($search) ?>" autocomplete="off">
+      <input type="text" id="productSearch" class="form-control search-input" placeholder="Search product, subcategory, category..." value="<?= e($search) ?>" autocomplete="off">
       <button class="search-clear-btn" id="clearSearch" type="button" style="display: <?= $search !== '' ? 'flex' : 'none' ?>;"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div class="text-muted small" id="searchCount">
@@ -58,7 +77,7 @@ require_once 'includes/header.php';
     <thead>
       <tr>
         <th>Product</th>
-        <th>Category</th>
+        <th>Subcategory (Category)</th>
         <th>Purchase Price</th>
         <th>Selling Price</th>
         <th>Quantity</th>
@@ -82,7 +101,15 @@ require_once 'includes/header.php';
           <div class="fw-semibold"><?= e($p['name']) ?></div>
           <div class="text-muted small"><?= e($p['sku']) ?></div>
         </td>
-        <td><span class="badge-cat"><?= e($p['category_name']) ?></span></td>
+        <td>
+          <?php if (!empty($p['subcategory_name'])): ?>
+            <span class="badge-cat">
+              <?= e($p['subcategory_name']) ?> <span class="text-muted opacity-75 fw-normal">(<?= e($p['category_name']) ?>)</span>
+            </span>
+          <?php else: ?>
+            <span class="badge-cat"><?= e($p['category_name']) ?></span>
+          <?php endif; ?>
+        </td>
         <td><?= money($p['purchase_price']) ?></td>
         <td><?= money($p['selling_price']) ?></td>
         <td class="<?= $isLow ? 'qty-low' : '' ?>"><?= rtrim(rtrim(number_format($p['quantity'],2), '0'), '.') ?> <?= e($p['unit']) ?></td>
@@ -94,6 +121,7 @@ require_once 'includes/header.php';
             data-name="<?= e($p['name']) ?>"
             data-sku="<?= e($p['sku']) ?>"
             data-category="<?= $p['category_id'] ?>"
+            data-subcategory="<?= $p['subcategory_id'] ?? '' ?>"
             data-unit="<?= e($p['unit']) ?>"
             data-purchase="<?= $p['purchase_price'] ?>"
             data-selling="<?= $p['selling_price'] ?>"
@@ -155,14 +183,95 @@ require_once 'includes/header.php';
   </div>
 </div>
 
+<!-- Add Subcategory Modal -->
+<div class="modal fade" id="addProductSubCategoryModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="POST" action="products_action.php" class="modal-content">
+      <input type="hidden" name="action" value="add_subcategory">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold"><i class="fa-solid fa-folder-plus me-2 text-success"></i>Add Subcategory</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Parent Category</label>
+          <select name="category_id" class="form-select" required>
+            <option value="">Select parent category...</option>
+            <?php foreach ($categories as $c): ?>
+              <option value="<?= $c['id'] ?>"><?= e($c['name']) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div class="mb-2">
+          <label class="form-label small fw-semibold">Subcategory Name</label>
+          <input type="text" name="subcategory_name" class="form-control" required placeholder="e.g. Organic Manure, Hybrid Seeds">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-brand">Save Subcategory</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <?php
 $extraScripts = '<script>
-document.getElementById("editProductModal").addEventListener("show.bs.modal", function (event) {
+function setupCategorySubcategoryFilter(catId, subId) {
+  const catSelect = document.getElementById(catId);
+  const subSelect = document.getElementById(subId);
+  if (!catSelect || !subSelect) return;
+
+  function filterOptions() {
+    const selectedCat = catSelect.value;
+    const options = subSelect.querySelectorAll("option");
+
+    options.forEach(opt => {
+      if (!opt.value) {
+        opt.hidden = false;
+        opt.disabled = false;
+        opt.style.display = "";
+        return;
+      }
+      const optCat = opt.getAttribute("data-category");
+      if (!selectedCat || optCat === selectedCat) {
+        opt.hidden = false;
+        opt.disabled = false;
+        opt.style.display = "";
+      } else {
+        opt.hidden = true;
+        opt.disabled = true;
+        opt.style.display = "none";
+      }
+    });
+
+    const currentSubOpt = subSelect.options[subSelect.selectedIndex];
+    if (currentSubOpt && currentSubOpt.value && selectedCat) {
+      if (currentSubOpt.getAttribute("data-category") !== selectedCat) {
+        subSelect.value = "";
+      }
+    }
+  }
+
+  catSelect.addEventListener("change", filterOptions);
+  filterOptions();
+}
+
+setupCategorySubcategoryFilter("category_id", "subcategory_id");
+setupCategorySubcategoryFilter("edit_category_id", "edit_subcategory_id");
+
+document.getElementById("editProductModal")?.addEventListener("show.bs.modal", function (event) {
   const btn = event.relatedTarget;
+  if (!btn) return;
   document.getElementById("edit_id").value = btn.dataset.id;
   document.getElementById("edit_name").value = btn.dataset.name;
   document.getElementById("edit_sku").value = btn.dataset.sku;
-  document.getElementById("edit_category_id").value = btn.dataset.category;
+  const catSelect = document.getElementById("edit_category_id");
+  if (catSelect) {
+    catSelect.value = btn.dataset.category;
+    catSelect.dispatchEvent(new Event("change"));
+  }
+  document.getElementById("edit_subcategory_id").value = btn.dataset.subcategory || "";
   document.getElementById("edit_unit").value = btn.dataset.unit;
   document.getElementById("edit_purchase_price").value = btn.dataset.purchase;
   document.getElementById("edit_selling_price").value = btn.dataset.selling;
@@ -211,4 +320,3 @@ if (searchInput) {
 </script>';
 require_once 'includes/footer.php';
 ?>
-

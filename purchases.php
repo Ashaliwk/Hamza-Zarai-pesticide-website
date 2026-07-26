@@ -6,23 +6,43 @@ require_login();
 $pageTitle = 'Purchases';
 $activeNav = 'purchases';
 
+// Ensure subcategory_id column exists in purchases table
+try {
+    $pdo->exec("ALTER TABLE purchases ADD COLUMN subcategory_id INT NULL AFTER product_id");
+} catch (PDOException $e) {}
+
 $search = trim($_GET['search'] ?? '');
 
-$products = $pdo->query("SELECT id, name, purchase_price, unit FROM products ORDER BY name")->fetchAll();
+$categories = $pdo->query("SELECT * FROM categories ORDER BY name")->fetchAll();
+
+$subcategories = $pdo->query("
+    SELECT s.*, c.name AS category_name
+    FROM subcategories s
+    JOIN categories c ON c.id = s.category_id
+    ORDER BY c.name, s.name
+")->fetchAll();
+
+$products = $pdo->query("SELECT id, name, purchase_price, unit, category_id FROM products ORDER BY name")->fetchAll();
 
 if ($search !== '') {
     $stmt = $pdo->prepare("
-        SELECT pu.*, p.name AS product_name
-        FROM purchases pu JOIN products p ON p.id = pu.product_id
-        WHERE p.name LIKE :s OR pu.supplier_name LIKE :s OR pu.purchase_date LIKE :s
+        SELECT pu.*, p.name AS product_name, sc.name AS subcategory_name, c.name AS category_name
+        FROM purchases pu
+        JOIN products p ON p.id = pu.product_id
+        LEFT JOIN subcategories sc ON sc.id = pu.subcategory_id
+        LEFT JOIN categories c ON c.id = p.category_id
+        WHERE p.name LIKE :s OR pu.supplier_name LIKE :s OR pu.purchase_date LIKE :s OR sc.name LIKE :s OR c.name LIKE :s
         ORDER BY pu.purchase_date DESC, pu.id DESC
     ");
     $stmt->execute([':s' => "%$search%"]);
     $purchases = $stmt->fetchAll();
 } else {
     $purchases = $pdo->query("
-        SELECT pu.*, p.name AS product_name
-        FROM purchases pu JOIN products p ON p.id = pu.product_id
+        SELECT pu.*, p.name AS product_name, sc.name AS subcategory_name, c.name AS category_name
+        FROM purchases pu
+        JOIN products p ON p.id = pu.product_id
+        LEFT JOIN subcategories sc ON sc.id = pu.subcategory_id
+        LEFT JOIN categories c ON c.id = p.category_id
         ORDER BY pu.purchase_date DESC, pu.id DESC
     ")->fetchAll();
 }
@@ -30,21 +50,26 @@ if ($search !== '') {
 require_once 'includes/header.php';
 ?>
 
-<div class="d-flex justify-content-between align-items-start mb-1">
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
   <div>
     <h1 class="page-title">Purchases</h1>
-    <p class="page-subtitle">Track your purchase transactions</p>
+    <p class="page-subtitle">Track your purchase transactions & subcategories</p>
   </div>
-  <button class="btn btn-brand fw-semibold" data-bs-toggle="modal" data-bs-target="#addPurchaseModal">
-    <i class="fa-solid fa-plus me-1"></i> Record Purchase
-  </button>
+  <div class="d-flex gap-2">
+    <!-- <button class="btn btn-outline-success fw-semibold" data-bs-toggle="modal" data-bs-target="#addPurchaseSubCategoryModal">
+      <i class="fa-solid fa-folder-plus me-1"></i> Add Subcategory
+    </button> -->
+    <button class="btn btn-brand fw-semibold" data-bs-toggle="modal" data-bs-target="#addPurchaseModal">
+      <i class="fa-solid fa-plus me-1"></i> Record Purchase
+    </button>
+  </div>
 </div>
 
 <div class="panel">
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <div class="search-box position-relative" style="max-width: 320px; width: 100%;">
       <i class="fa-solid fa-magnifying-glass search-icon"></i>
-      <input type="text" id="purchasesSearch" class="form-control search-input" placeholder="Search product, supplier, date..." value="<?= e($search) ?>" autocomplete="off">
+      <input type="text" id="purchasesSearch" class="form-control search-input" placeholder="Search product, subcategory, supplier, date..." value="<?= e($search) ?>" autocomplete="off">
       <button class="search-clear-btn" id="clearPurchasesSearch" type="button" style="display: <?= $search !== '' ? 'flex' : 'none' ?>;"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div class="text-muted small" id="purchasesCount">
@@ -57,6 +82,7 @@ require_once 'includes/header.php';
       <tr>
         <th>Date</th>
         <th>Product</th>
+        <th>Subcategory</th>
         <th>Supplier</th>
         <th>Quantity</th>
         <th>Price/Unit</th>
@@ -66,13 +92,22 @@ require_once 'includes/header.php';
     </thead>
     <tbody>
       <?php if (!$purchases): ?>
-        <tr><td colspan="7" class="text-center text-muted py-4">No purchases found.</td></tr>
+        <tr><td colspan="8" class="text-center text-muted py-4">No purchases found.</td></tr>
       <?php endif; ?>
-      <tr id="noMatchPurchasesRow" style="display:none;"><td colspan="7" class="text-center text-muted py-4">No matching purchases recorded.</td></tr>
+      <tr id="noMatchPurchasesRow" style="display:none;"><td colspan="8" class="text-center text-muted py-4">No matching purchases recorded.</td></tr>
       <?php foreach ($purchases as $p): ?>
       <tr class="purchase-row">
         <td><?= date('n/j/Y', strtotime($p['purchase_date'])) ?></td>
-        <td><?= e($p['product_name']) ?></td>
+        <td class="fw-semibold"><?= e($p['product_name']) ?></td>
+        <td>
+          <?php if (!empty($p['subcategory_name'])): ?>
+            <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle fw-semibold" style="font-size:0.8rem;">
+              <i class="fa-solid fa-tag me-1 text-success" style="font-size:0.7rem;"></i><?= e($p['subcategory_name']) ?>
+            </span>
+          <?php else: ?>
+            <span class="text-muted small">&mdash;</span>
+          <?php endif; ?>
+        </td>
         <td><?= e($p['supplier_name']) ?></td>
         <td><?= rtrim(rtrim(number_format($p['quantity'],2), '0'), '.') ?></td>
         <td><?= money($p['price_per_unit']) ?></td>
@@ -82,6 +117,7 @@ require_once 'includes/header.php';
             data-bs-toggle="modal" data-bs-target="#editPurchaseModal"
             data-id="<?= $p['id'] ?>"
             data-product="<?= $p['product_id'] ?>"
+            data-subcategory="<?= $p['subcategory_id'] ?? '' ?>"
             data-supplier="<?= e($p['supplier_name']) ?>"
             data-qty="<?= $p['quantity'] ?>"
             data-price="<?= $p['price_per_unit'] ?>"
@@ -113,10 +149,26 @@ require_once 'includes/header.php';
       <div class="modal-body">
         <div class="mb-3">
           <label class="form-label small fw-semibold">Product</label>
-          <select name="product_id" class="form-select" required>
+          <select name="product_id" id="add_purchase_product" class="form-select" required>
             <option value="">Select product...</option>
             <?php foreach ($products as $p): ?>
-              <option value="<?= $p['id'] ?>"><?= e($p['name']) ?></option>
+              <option value="<?= $p['id'] ?>" data-category="<?= $p['category_id'] ?>"><?= e($p['name']) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div class="mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <label class="form-label small fw-semibold mb-0">Subcategory</label>
+            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-success small fw-semibold" data-bs-toggle="modal" data-bs-target="#addPurchaseSubCategoryModal">
+              <i class="fa-solid fa-plus me-1"></i>New Subcategory
+            </button>
+          </div>
+          <select name="subcategory_id" id="add_purchase_subcategory" class="form-select">
+            <option value="">-- Select Subcategory (Optional) --</option>
+            <?php foreach ($subcategories as $sub): ?>
+              <option value="<?= $sub['id'] ?>" data-category="<?= $sub['category_id'] ?>">
+                <?= e($sub['name']) ?> (<?= e($sub['category_name']) ?>)
+              </option>
             <?php endforeach; ?>
           </select>
         </div>
@@ -163,7 +215,23 @@ require_once 'includes/header.php';
           <select name="product_id" id="edit_purchase_product" class="form-select" required>
             <option value="">Select product...</option>
             <?php foreach ($products as $p): ?>
-              <option value="<?= $p['id'] ?>"><?= e($p['name']) ?></option>
+              <option value="<?= $p['id'] ?>" data-category="<?= $p['category_id'] ?>"><?= e($p['name']) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div class="mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <label class="form-label small fw-semibold mb-0">Subcategory</label>
+            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-success small fw-semibold" data-bs-toggle="modal" data-bs-target="#addPurchaseSubCategoryModal">
+              <i class="fa-solid fa-plus me-1"></i>New Subcategory
+            </button>
+          </div>
+          <select name="subcategory_id" id="edit_purchase_subcategory" class="form-select">
+            <option value="">-- Select Subcategory (Optional) --</option>
+            <?php foreach ($subcategories as $sub): ?>
+              <option value="<?= $sub['id'] ?>" data-category="<?= $sub['category_id'] ?>">
+                <?= e($sub['name']) ?> (<?= e($sub['category_name']) ?>)
+              </option>
             <?php endforeach; ?>
           </select>
         </div>
@@ -194,13 +262,94 @@ require_once 'includes/header.php';
   </div>
 </div>
 
+<!-- Add Subcategory Modal -->
+<div class="modal fade" id="addPurchaseSubCategoryModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="POST" action="purchases_action.php" class="modal-content">
+      <input type="hidden" name="action" value="add_subcategory">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold"><i class="fa-solid fa-folder-plus me-2 text-success"></i>Add Subcategory</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Parent Category</label>
+          <select name="category_id" class="form-select" required>
+            <option value="">Select parent category...</option>
+            <?php foreach ($categories as $c): ?>
+              <option value="<?= $c['id'] ?>"><?= e($c['name']) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div class="mb-2">
+          <label class="form-label small fw-semibold">Subcategory Name</label>
+          <input type="text" name="subcategory_name" class="form-control" required placeholder="e.g. Organic Manure, Hybrid Seeds">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-brand">Save Subcategory</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <?php
 $extraScripts = '<script>
+function setupProductSubcategoryFilter(prodId, subId) {
+  const prodSelect = document.getElementById(prodId);
+  const subSelect = document.getElementById(subId);
+  if (!prodSelect || !subSelect) return;
+
+  function filterSubcategories() {
+    const selectedProdOpt = prodSelect.options[prodSelect.selectedIndex];
+    const selectedCat = selectedProdOpt ? selectedProdOpt.getAttribute("data-category") : "";
+    const options = subSelect.querySelectorAll("option");
+
+    options.forEach(opt => {
+      if (!opt.value) {
+        opt.hidden = false;
+        opt.disabled = false;
+        opt.style.display = "";
+        return;
+      }
+      const optCat = opt.getAttribute("data-category");
+      if (!selectedCat || optCat === selectedCat) {
+        opt.hidden = false;
+        opt.disabled = false;
+        opt.style.display = "";
+      } else {
+        opt.hidden = true;
+        opt.disabled = true;
+        opt.style.display = "none";
+      }
+    });
+
+    const currentSubOpt = subSelect.options[subSelect.selectedIndex];
+    if (currentSubOpt && currentSubOpt.value && selectedCat) {
+      if (currentSubOpt.getAttribute("data-category") !== selectedCat) {
+        subSelect.value = "";
+      }
+    }
+  }
+
+  prodSelect.addEventListener("change", filterSubcategories);
+  filterSubcategories();
+}
+
+setupProductSubcategoryFilter("add_purchase_product", "add_purchase_subcategory");
+setupProductSubcategoryFilter("edit_purchase_product", "edit_purchase_subcategory");
+
 document.getElementById("editPurchaseModal")?.addEventListener("show.bs.modal", function (event) {
   const btn = event.relatedTarget;
   if (!btn) return;
   document.getElementById("edit_purchase_id").value = btn.dataset.id;
-  document.getElementById("edit_purchase_product").value = btn.dataset.product;
+  const prodSelect = document.getElementById("edit_purchase_product");
+  if (prodSelect) {
+    prodSelect.value = btn.dataset.product;
+    prodSelect.dispatchEvent(new Event("change"));
+  }
+  document.getElementById("edit_purchase_subcategory").value = btn.dataset.subcategory || "";
   document.getElementById("edit_purchase_supplier").value = btn.dataset.supplier;
   document.getElementById("edit_purchase_qty").value = btn.dataset.qty;
   document.getElementById("edit_purchase_price").value = btn.dataset.price;
@@ -216,7 +365,7 @@ const noMatchPurchasesRow = document.getElementById("noMatchPurchasesRow");
 function filterPurchases() {
   const query = purchasesInput.value.toLowerCase().trim();
   clearPurchasesBtn.style.display = query.length > 0 ? "flex" : "none";
-  
+
   let visibleCount = 0;
   purchaseRows.forEach(row => {
     const text = row.innerText.toLowerCase();
@@ -231,13 +380,13 @@ function filterPurchases() {
   if (purchasesCount) {
     purchasesCount.textContent = visibleCount + (visibleCount === 1 ? " purchase found" : " purchases found");
   }
-  
+
   if (noMatchPurchasesRow) {
     noMatchPurchasesRow.style.display = (visibleCount === 0 && purchaseRows.length > 0) ? "" : "none";
   }
 }
 
-if (purchasesInput) {
+if (searchInput = document.getElementById("purchasesSearch")) {
   purchasesInput.addEventListener("input", filterPurchases);
   clearPurchasesBtn.addEventListener("click", function() {
     purchasesInput.value = "";
@@ -248,4 +397,3 @@ if (purchasesInput) {
 </script>';
 require_once 'includes/footer.php';
 ?>
-

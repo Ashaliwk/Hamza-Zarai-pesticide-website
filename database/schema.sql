@@ -119,13 +119,15 @@ INSERT INTO sales (product_id, customer_name, quantity, price_per_unit, total, p
 CREATE TABLE purchases (
     id INT AUTO_INCREMENT PRIMARY KEY,
     product_id INT NOT NULL,
+    subcategory_id INT DEFAULT NULL,
     supplier_name VARCHAR(150) NOT NULL,
     quantity DECIMAL(12,2) NOT NULL,
     price_per_unit DECIMAL(12,2) NOT NULL,
     total DECIMAL(14,2) NOT NULL,
     purchase_date DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    FOREIGN KEY (subcategory_id) REFERENCES subcategories(id) ON DELETE SET NULL
 );
 
 INSERT INTO purchases (product_id, supplier_name, quantity, price_per_unit, total, purchase_date) VALUES

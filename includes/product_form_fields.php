@@ -13,12 +13,28 @@ $prefix = $prefix ?? '';
   <div class="col-6 mb-3">
     <label class="form-label small fw-semibold">Category</label>
     <select name="category_id" id="<?= $prefix ?>category_id" class="form-select" required>
-      <option value="">Select...</option>
+      <option value="">Select category...</option>
       <?php foreach ($categories as $c): ?>
         <option value="<?= $c['id'] ?>"><?= e($c['name']) ?></option>
       <?php endforeach; ?>
     </select>
   </div>
+</div>
+<div class="mb-3">
+  <div class="d-flex justify-content-between align-items-center mb-1">
+    <label class="form-label small fw-semibold mb-0">Subcategory</label>
+    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-success small fw-semibold" data-bs-toggle="modal" data-bs-target="#addProductSubCategoryModal">
+      <i class="fa-solid fa-plus me-1"></i>Add Subcategory
+    </button>
+  </div>
+  <select name="subcategory_id" id="<?= $prefix ?>subcategory_id" class="form-select">
+    <option value="">Select subcategory (Optional)...</option>
+    <?php foreach ($subcategories as $sub): ?>
+      <option value="<?= $sub['id'] ?>" data-category="<?= $sub['category_id'] ?>">
+        <?= e($sub['name']) ?> (<?= e($sub['category_name']) ?>)
+      </option>
+    <?php endforeach; ?>
+  </select>
 </div>
 <div class="row">
   <div class="col-6 mb-3">
