@@ -33,7 +33,7 @@ $company     = $_SESSION['company_name'] ?? 'My Corporation';
       <i class="fa-solid fa-grip"></i> Dashboard
     </a>
     <a class="nav-link <?= ($activeNav ?? '') === 'products' ? 'active' : '' ?>" href="products.php">
-      <i class="fa-solid fa-cube"></i> Products
+      <i class="fa-solid fa-cube"></i> Stock
     </a>
     <a class="nav-link <?= ($activeNav ?? '') === 'categories' ? 'active' : '' ?>" href="categories.php">
       <i class="fa-solid fa-layer-group"></i> Categories
