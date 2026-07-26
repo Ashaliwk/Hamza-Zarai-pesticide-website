@@ -6,17 +6,40 @@ require_login();
 $action = $_POST['action'] ?? '';
 
 if ($action === 'add') {
-    $product_id = (int)($_POST['product_id'] ?? 0);
-    $customer   = trim($_POST['customer_name'] ?? '');
-    $qty        = (float)($_POST['quantity'] ?? 0);
-    $price      = (float)($_POST['price_per_unit'] ?? 0);
-    $date       = $_POST['sale_date'] ?? date('Y-m-d');
-    $total      = $qty * $price;
+    $product_id     = (int)($_POST['product_id'] ?? 0);
+    $customer       = trim($_POST['customer_name'] ?? '');
+    $qty            = (float)($_POST['quantity'] ?? 0);
+    $price          = (float)($_POST['price_per_unit'] ?? 0);
+    $date           = $_POST['sale_date'] ?? date('Y-m-d');
+    $payment_status = $_POST['payment_status'] ?? 'paid';
+    $paid_amount    = (float)($_POST['paid_amount'] ?? 0);
+    $total          = $qty * $price;
 
     if ($product_id <= 0 || $customer === '' || $qty <= 0) {
         flash_set('error', 'Please fill all required fields.');
         header('Location: sales.php');
         exit;
+    }
+
+    if ($payment_status === 'paid') {
+        $paid_amount = $total;
+        $due_amount  = 0.00;
+    } elseif ($payment_status === 'unpaid') {
+        $paid_amount = 0.00;
+        $due_amount  = $total;
+    } else {
+        if ($paid_amount >= $total) {
+            $payment_status = 'paid';
+            $paid_amount    = $total;
+            $due_amount     = 0.00;
+        } elseif ($paid_amount <= 0) {
+            $payment_status = 'unpaid';
+            $paid_amount    = 0.00;
+            $due_amount     = $total;
+        } else {
+            $payment_status = 'partial';
+            $due_amount     = $total - $paid_amount;
+        }
     }
 
     $prod = $pdo->prepare("SELECT quantity FROM products WHERE id = ?");
@@ -35,27 +58,50 @@ if ($action === 'add') {
     }
 
     $pdo->beginTransaction();
-    $stmt = $pdo->prepare("INSERT INTO sales (product_id, customer_name, quantity, price_per_unit, total, sale_date) VALUES (?,?,?,?,?,?)");
-    $stmt->execute([$product_id, $customer, $qty, $price, $total, $date]);
+    $stmt = $pdo->prepare("INSERT INTO sales (product_id, customer_name, quantity, price_per_unit, total, payment_status, paid_amount, due_amount, sale_date) VALUES (?,?,?,?,?,?,?,?,?)");
+    $stmt->execute([$product_id, $customer, $qty, $price, $total, $payment_status, $paid_amount, $due_amount, $date]);
 
     $upd = $pdo->prepare("UPDATE products SET quantity = quantity - ? WHERE id = ?");
     $upd->execute([$qty, $product_id]);
     $pdo->commit();
 
-    flash_set('success', 'Sale recorded.');
+    flash_set('success', 'Sale recorded successfully.');
 } elseif ($action === 'edit') {
-    $id         = (int)($_POST['id'] ?? 0);
-    $product_id = (int)($_POST['product_id'] ?? 0);
-    $customer   = trim($_POST['customer_name'] ?? '');
-    $qty        = (float)($_POST['quantity'] ?? 0);
-    $price      = (float)($_POST['price_per_unit'] ?? 0);
-    $date       = $_POST['sale_date'] ?? date('Y-m-d');
-    $total      = $qty * $price;
+    $id             = (int)($_POST['id'] ?? 0);
+    $product_id     = (int)($_POST['product_id'] ?? 0);
+    $customer       = trim($_POST['customer_name'] ?? '');
+    $qty            = (float)($_POST['quantity'] ?? 0);
+    $price          = (float)($_POST['price_per_unit'] ?? 0);
+    $date           = $_POST['sale_date'] ?? date('Y-m-d');
+    $payment_status = $_POST['payment_status'] ?? 'paid';
+    $paid_amount    = (float)($_POST['paid_amount'] ?? 0);
+    $total          = $qty * $price;
 
     if ($id <= 0 || $product_id <= 0 || $customer === '' || $qty <= 0) {
         flash_set('error', 'Please fill all required fields.');
         header('Location: sales.php');
         exit;
+    }
+
+    if ($payment_status === 'paid') {
+        $paid_amount = $total;
+        $due_amount  = 0.00;
+    } elseif ($payment_status === 'unpaid') {
+        $paid_amount = 0.00;
+        $due_amount  = $total;
+    } else {
+        if ($paid_amount >= $total) {
+            $payment_status = 'paid';
+            $paid_amount    = $total;
+            $due_amount     = 0.00;
+        } elseif ($paid_amount <= 0) {
+            $payment_status = 'unpaid';
+            $paid_amount    = 0.00;
+            $due_amount     = $total;
+        } else {
+            $payment_status = 'partial';
+            $due_amount     = $total - $paid_amount;
+        }
     }
 
     $stmt = $pdo->prepare("SELECT * FROM sales WHERE id = ?");
@@ -87,8 +133,8 @@ if ($action === 'add') {
         $upd = $pdo->prepare("UPDATE products SET quantity = quantity + ? - ? WHERE id = ?");
         $upd->execute([$old_qty, $qty, $product_id]);
 
-        $updSale = $pdo->prepare("UPDATE sales SET product_id = ?, customer_name = ?, quantity = ?, price_per_unit = ?, total = ?, sale_date = ? WHERE id = ?");
-        $updSale->execute([$product_id, $customer, $qty, $price, $total, $date, $id]);
+        $updSale = $pdo->prepare("UPDATE sales SET product_id = ?, customer_name = ?, quantity = ?, price_per_unit = ?, total = ?, payment_status = ?, paid_amount = ?, due_amount = ?, sale_date = ? WHERE id = ?");
+        $updSale->execute([$product_id, $customer, $qty, $price, $total, $payment_status, $paid_amount, $due_amount, $date, $id]);
         $pdo->commit();
     } else {
         $prod = $pdo->prepare("SELECT quantity FROM products WHERE id = ?");
@@ -108,12 +154,12 @@ if ($action === 'add') {
         $updNew = $pdo->prepare("UPDATE products SET quantity = quantity - ? WHERE id = ?");
         $updNew->execute([$qty, $product_id]);
 
-        $updSale = $pdo->prepare("UPDATE sales SET product_id = ?, customer_name = ?, quantity = ?, price_per_unit = ?, total = ?, sale_date = ? WHERE id = ?");
-        $updSale->execute([$product_id, $customer, $qty, $price, $total, $date, $id]);
+        $updSale = $pdo->prepare("UPDATE sales SET product_id = ?, customer_name = ?, quantity = ?, price_per_unit = ?, total = ?, payment_status = ?, paid_amount = ?, due_amount = ?, sale_date = ? WHERE id = ?");
+        $updSale->execute([$product_id, $customer, $qty, $price, $total, $payment_status, $paid_amount, $due_amount, $date, $id]);
         $pdo->commit();
     }
 
-    flash_set('success', 'Sale transaction updated.');
+    flash_set('success', 'Sale transaction updated successfully.');
 } elseif ($action === 'delete') {
     $id = (int)($_POST['id'] ?? 0);
     $stmt = $pdo->prepare("SELECT * FROM sales WHERE id = ?");
@@ -122,7 +168,6 @@ if ($action === 'add') {
 
     if ($sale) {
         $pdo->beginTransaction();
-        // restore stock
         $upd = $pdo->prepare("UPDATE products SET quantity = quantity + ? WHERE id = ?");
         $upd->execute([$sale['quantity'], $sale['product_id']]);
         $del = $pdo->prepare("DELETE FROM sales WHERE id = ?");

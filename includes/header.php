@@ -23,8 +23,8 @@ $company     = $_SESSION['company_name'] ?? 'My Corporation';
   <div class="brand">
     <div class="logo-icon">🌱</div>
     <div>
-      <div class="brand-title"><?= e($company) ?></div>
-      <div class="brand-sub">Corporation</div>
+      <div class="brand-title">Hamza Zarai</div>
+      <div class="brand-sub">Services</div>
     </div>
   </div>
 

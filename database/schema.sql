@@ -100,15 +100,18 @@ CREATE TABLE sales (
     quantity DECIMAL(12,2) NOT NULL,
     price_per_unit DECIMAL(12,2) NOT NULL,
     total DECIMAL(14,2) NOT NULL,
+    payment_status ENUM('paid', 'unpaid', 'partial') NOT NULL DEFAULT 'paid',
+    paid_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    due_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     sale_date DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
 );
 
-INSERT INTO sales (product_id, customer_name, quantity, price_per_unit, total, sale_date) VALUES
-(1, 'Hamza', 35, 670.00, 23450.00, CURDATE()),
-(3, 'Umer', 9, 1600.00, 14400.00, CURDATE()),
-(4, 'Ali Ashraf', 1, 1500.00, 1500.00, CURDATE());
+INSERT INTO sales (product_id, customer_name, quantity, price_per_unit, total, payment_status, paid_amount, due_amount, sale_date) VALUES
+(1, 'Hamza', 35, 670.00, 23450.00, 'paid', 23450.00, 0.00, CURDATE()),
+(3, 'Umer', 9, 1600.00, 14400.00, 'partial', 10000.00, 4400.00, CURDATE()),
+(4, 'Ali Ashraf', 1, 1500.00, 1500.00, 'unpaid', 0.00, 1500.00, CURDATE());
 
 -- ------------------------------------------------------------
 -- Purchases

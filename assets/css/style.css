@@ -158,6 +158,35 @@ body {
 }
 .icon-btn.edit:hover { background: #eef6ff; color: #3b82f6; border-color: #cfe4ff; }
 .icon-btn.del:hover  { background: #fdeceb; color: var(--danger); border-color: #f6c9c6; }
+.icon-btn.pdf:hover  { background: #fef2f2; color: #dc2626; border-color: #fca5a5; }
+.icon-btn.print:hover{ background: #f0fdf4; color: #16a34a; border-color: #86efac; }
+
+/* Print rules */
+@media print {
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .sidebar, .d-flex.justify-content-between, .search-box, .no-print, .btn, .modal-footer, .modal-header .btn-close, .sidebar-footer {
+    display: none !important;
+  }
+  .main-content {
+    margin-left: 0 !important;
+    padding: 0 !important;
+  }
+  .modal-dialog {
+    max-width: 100% !important;
+    margin: 0 !important;
+  }
+  .modal-content {
+    border: none !important;
+    box-shadow: none !important;
+  }
+  #printableInvoiceArea {
+    border: none !important;
+    padding: 0 !important;
+  }
+}
 
 /* category cards */
 .cat-card {
