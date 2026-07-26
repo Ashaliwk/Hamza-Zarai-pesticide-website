@@ -6,9 +6,12 @@ require_login();
 $pageTitle = 'Purchases';
 $activeNav = 'purchases';
 
-// Ensure subcategory_id column exists in purchases table
+// Ensure subcategory_id & unit columns exist in purchases table
 try {
     $pdo->exec("ALTER TABLE purchases ADD COLUMN subcategory_id INT NULL AFTER product_id");
+} catch (PDOException $e) {}
+try {
+    $pdo->exec("ALTER TABLE purchases ADD COLUMN unit VARCHAR(20) NULL AFTER quantity");
 } catch (PDOException $e) {}
 
 $search = trim($_GET['search'] ?? '');
@@ -22,11 +25,11 @@ $subcategories = $pdo->query("
     ORDER BY c.name, s.name
 ")->fetchAll();
 
-$products = $pdo->query("SELECT id, name, purchase_price, unit, category_id FROM products ORDER BY name")->fetchAll();
+$products = $pdo->query("SELECT id, name, purchase_price, unit, category_id, subcategory_id FROM products ORDER BY name")->fetchAll();
 
 if ($search !== '') {
     $stmt = $pdo->prepare("
-        SELECT pu.*, p.name AS product_name, sc.name AS subcategory_name, c.name AS category_name
+        SELECT pu.*, p.name AS product_name, COALESCE(pu.unit, p.unit) AS product_unit, sc.name AS subcategory_name, c.name AS category_name
         FROM purchases pu
         JOIN products p ON p.id = pu.product_id
         LEFT JOIN subcategories sc ON sc.id = pu.subcategory_id
@@ -38,7 +41,7 @@ if ($search !== '') {
     $purchases = $stmt->fetchAll();
 } else {
     $purchases = $pdo->query("
-        SELECT pu.*, p.name AS product_name, sc.name AS subcategory_name, c.name AS category_name
+        SELECT pu.*, p.name AS product_name, COALESCE(pu.unit, p.unit) AS product_unit, sc.name AS subcategory_name, c.name AS category_name
         FROM purchases pu
         JOIN products p ON p.id = pu.product_id
         LEFT JOIN subcategories sc ON sc.id = pu.subcategory_id
@@ -109,17 +112,19 @@ require_once 'includes/header.php';
           <?php endif; ?>
         </td>
         <td><?= e($p['supplier_name']) ?></td>
-        <td><?= rtrim(rtrim(number_format($p['quantity'],2), '0'), '.') ?></td>
+        <td><?= rtrim(rtrim(number_format($p['quantity'],2), '0'), '.') ?> <?= e($p['product_unit'] ?? '') ?></td>
         <td><?= money($p['price_per_unit']) ?></td>
         <td class="fw-bold"><?= money($p['total']) ?></td>
         <td class="text-end">
           <button class="icon-btn edit me-1" title="Edit"
             data-bs-toggle="modal" data-bs-target="#editPurchaseModal"
             data-id="<?= $p['id'] ?>"
-            data-product="<?= $p['product_id'] ?>"
+            data-product-name="<?= e($p['product_name']) ?>"
+            data-category="<?= $p['category_id'] ?? '' ?>"
             data-subcategory="<?= $p['subcategory_id'] ?? '' ?>"
             data-supplier="<?= e($p['supplier_name']) ?>"
             data-qty="<?= $p['quantity'] ?>"
+            data-unit="<?= e($p['product_unit'] ?? '') ?>"
             data-price="<?= $p['price_per_unit'] ?>"
             data-date="<?= $p['purchase_date'] ?>">
             <i class="fa-solid fa-pen"></i>
@@ -137,6 +142,13 @@ require_once 'includes/header.php';
   </div>
 </div>
 
+<!-- Datalist for Existing Products -->
+<datalist id="existing_products_list">
+  <?php foreach ($products as $p): ?>
+    <option value="<?= e($p['name']) ?>" data-category="<?= $p['category_id'] ?>" data-subcategory="<?= $p['subcategory_id'] ?? '' ?>" data-unit="<?= e($p['unit']) ?>" data-price="<?= $p['purchase_price'] ?>"></option>
+  <?php endforeach; ?>
+</datalist>
+
 <!-- Record Purchase Modal -->
 <div class="modal fade" id="addPurchaseModal" tabindex="-1">
   <div class="modal-dialog">
@@ -148,11 +160,11 @@ require_once 'includes/header.php';
       </div>
       <div class="modal-body">
         <div class="mb-3">
-          <label class="form-label small fw-semibold">Product</label>
-          <select name="product_id" id="add_purchase_product" class="form-select" required>
-            <option value="">Select product...</option>
-            <?php foreach ($products as $p): ?>
-              <option value="<?= $p['id'] ?>" data-category="<?= $p['category_id'] ?>"><?= e($p['name']) ?></option>
+          <label class="form-label small fw-semibold">Category</label>
+          <select name="category_id" id="add_purchase_category" class="form-select">
+            <option value="">-- Select Category --</option>
+            <?php foreach ($categories as $c): ?>
+              <option value="<?= $c['id'] ?>"><?= e($c['name']) ?></option>
             <?php endforeach; ?>
           </select>
         </div>
@@ -173,17 +185,32 @@ require_once 'includes/header.php';
           </select>
         </div>
         <div class="mb-3">
+          <label class="form-label small fw-semibold">Item / Product Name</label>
+          <input type="text" name="product_name" id="add_purchase_product_name" class="form-control" required  list="existing_products_list" autocomplete="off">
+        </div>
+        <div class="mb-3">
           <label class="form-label small fw-semibold">Supplier Name</label>
           <input type="text" name="supplier_name" class="form-control" required>
         </div>
         <div class="row">
-          <div class="col-6 mb-3">
+          <div class="col-4 mb-3">
             <label class="form-label small fw-semibold">Quantity</label>
-            <input type="number" step="0.01" name="quantity" class="form-control" required>
+            <input type="number" step="0.01" name="quantity" id="add_purchase_qty" class="form-control" required placeholder="0.00">
           </div>
-          <div class="col-6 mb-3">
+          <div class="col-4 mb-3">
+            <label class="form-label small fw-semibold">Unit</label>
+            <select name="unit" id="add_purchase_unit" class="form-select" required>
+              <option value="kg">kg</option>
+              <option value="g">g</option>
+              <option value="liter">liter</option>
+              <option value="ml">ml</option>
+              <option value="bag">bag</option>
+              <option value="pcs">pcs</option>
+            </select>
+          </div>
+          <div class="col-4 mb-3">
             <label class="form-label small fw-semibold">Price / Unit (Rs)</label>
-            <input type="number" step="0.01" name="price_per_unit" class="form-control" required>
+            <input type="number" step="0.01" name="price_per_unit" id="add_purchase_price" class="form-control" required placeholder="0.00">
           </div>
         </div>
         <div class="mb-1">
@@ -211,11 +238,11 @@ require_once 'includes/header.php';
       </div>
       <div class="modal-body">
         <div class="mb-3">
-          <label class="form-label small fw-semibold">Product</label>
-          <select name="product_id" id="edit_purchase_product" class="form-select" required>
-            <option value="">Select product...</option>
-            <?php foreach ($products as $p): ?>
-              <option value="<?= $p['id'] ?>" data-category="<?= $p['category_id'] ?>"><?= e($p['name']) ?></option>
+          <label class="form-label small fw-semibold">Category</label>
+          <select name="category_id" id="edit_purchase_category" class="form-select">
+            <option value="">-- Select Category --</option>
+            <?php foreach ($categories as $c): ?>
+              <option value="<?= $c['id'] ?>"><?= e($c['name']) ?></option>
             <?php endforeach; ?>
           </select>
         </div>
@@ -236,15 +263,30 @@ require_once 'includes/header.php';
           </select>
         </div>
         <div class="mb-3">
+          <label class="form-label small fw-semibold">Item / Product Name</label>
+          <input type="text" name="product_name" id="edit_purchase_product_name" class="form-control" required placeholder="Enter product name" list="existing_products_list" autocomplete="off">
+        </div>
+        <div class="mb-3">
           <label class="form-label small fw-semibold">Supplier Name</label>
           <input type="text" name="supplier_name" id="edit_purchase_supplier" class="form-control" required>
         </div>
         <div class="row">
-          <div class="col-6 mb-3">
+          <div class="col-4 mb-3">
             <label class="form-label small fw-semibold">Quantity</label>
             <input type="number" step="0.01" name="quantity" id="edit_purchase_qty" class="form-control" required>
           </div>
-          <div class="col-6 mb-3">
+          <div class="col-4 mb-3">
+            <label class="form-label small fw-semibold">Unit</label>
+            <select name="unit" id="edit_purchase_unit" class="form-select" required>
+              <option value="kg">kg</option>
+              <option value="g">g</option>
+              <option value="liter">liter</option>
+              <option value="ml">ml</option>
+              <option value="bag">bag</option>
+              <option value="pcs">pcs</option>
+            </select>
+          </div>
+          <div class="col-4 mb-3">
             <label class="form-label small fw-semibold">Price / Unit (Rs)</label>
             <input type="number" step="0.01" name="price_per_unit" id="edit_purchase_price" class="form-control" required>
           </div>
@@ -296,23 +338,15 @@ require_once 'includes/header.php';
 
 <?php
 $extraScripts = '<script>
-function setupProductSubcategoryFilter(prodId, subId) {
-  const prodSelect = document.getElementById(prodId);
+function setupPurchaseCategorySubFilter(catId, subId) {
+  const catSelect = document.getElementById(catId);
   const subSelect = document.getElementById(subId);
-  if (!prodSelect || !subSelect) return;
+  if (!catSelect || !subSelect) return;
 
-  function filterSubcategories() {
-    const selectedProdOpt = prodSelect.options[prodSelect.selectedIndex];
-    const selectedCat = selectedProdOpt ? selectedProdOpt.getAttribute("data-category") : "";
-    const options = subSelect.querySelectorAll("option");
-
-    options.forEach(opt => {
-      if (!opt.value) {
-        opt.hidden = false;
-        opt.disabled = false;
-        opt.style.display = "";
-        return;
-      }
+  function filterSub() {
+    const selectedCat = catSelect.value;
+    Array.from(subSelect.options).forEach(opt => {
+      if (!opt.value) return;
       const optCat = opt.getAttribute("data-category");
       if (!selectedCat || optCat === selectedCat) {
         opt.hidden = false;
@@ -325,35 +359,81 @@ function setupProductSubcategoryFilter(prodId, subId) {
       }
     });
 
-    const currentSubOpt = subSelect.options[subSelect.selectedIndex];
-    if (currentSubOpt && currentSubOpt.value && selectedCat) {
-      if (currentSubOpt.getAttribute("data-category") !== selectedCat) {
-        subSelect.value = "";
-      }
+    const curSubOpt = subSelect.options[subSelect.selectedIndex];
+    if (curSubOpt && curSubOpt.value && selectedCat && curSubOpt.getAttribute("data-category") !== selectedCat) {
+      subSelect.value = "";
     }
   }
 
-  prodSelect.addEventListener("change", filterSubcategories);
-  filterSubcategories();
+  catSelect.addEventListener("change", filterSub);
+  filterSub();
 }
 
-setupProductSubcategoryFilter("add_purchase_product", "add_purchase_subcategory");
-setupProductSubcategoryFilter("edit_purchase_product", "edit_purchase_subcategory");
+setupPurchaseCategorySubFilter("add_purchase_category", "add_purchase_subcategory");
+setupPurchaseCategorySubFilter("edit_purchase_category", "edit_purchase_subcategory");
+
+function setupProductNameAutofill(prodNameId, catId, subId, unitId, priceId) {
+  const nameInput = document.getElementById(prodNameId);
+  const catSelect = document.getElementById(catId);
+  const subSelect = document.getElementById(subId);
+  const unitSelect = document.getElementById(unitId);
+  const priceInput = document.getElementById(priceId);
+  const datalist = document.getElementById("existing_products_list");
+
+  if (!nameInput || !datalist) return;
+
+  nameInput.addEventListener("input", function() {
+    const val = nameInput.value.trim().toLowerCase();
+    if (!val) return;
+
+    const options = Array.from(datalist.options);
+    const matchedOpt = options.find(opt => opt.value.toLowerCase() === val);
+    if (matchedOpt) {
+      const cat = matchedOpt.getAttribute("data-category");
+      const sub = matchedOpt.getAttribute("data-subcategory");
+      const unit = matchedOpt.getAttribute("data-unit");
+      const price = matchedOpt.getAttribute("data-price");
+
+      if (catSelect && cat) {
+        catSelect.value = cat;
+        catSelect.dispatchEvent(new Event("change"));
+      }
+      if (subSelect && sub) {
+        subSelect.value = sub;
+      }
+      if (unitSelect && unit) {
+        unitSelect.value = unit;
+      }
+      if (priceInput && price && !priceInput.value) {
+        priceInput.value = price;
+      }
+    }
+  });
+}
+
+setupProductNameAutofill("add_purchase_product_name", "add_purchase_category", "add_purchase_subcategory", "add_purchase_unit", "add_purchase_price");
+setupProductNameAutofill("edit_purchase_product_name", "edit_purchase_category", "edit_purchase_subcategory", "edit_purchase_unit", "edit_purchase_price");
 
 document.getElementById("editPurchaseModal")?.addEventListener("show.bs.modal", function (event) {
   const btn = event.relatedTarget;
   if (!btn) return;
   document.getElementById("edit_purchase_id").value = btn.dataset.id;
-  const prodSelect = document.getElementById("edit_purchase_product");
-  if (prodSelect) {
-    prodSelect.value = btn.dataset.product;
-    prodSelect.dispatchEvent(new Event("change"));
+  document.getElementById("edit_purchase_product_name").value = btn.dataset.productName || "";
+  const catSelect = document.getElementById("edit_purchase_category");
+  if (catSelect && btn.dataset.category) {
+    catSelect.value = btn.dataset.category;
+    catSelect.dispatchEvent(new Event("change"));
   }
-  document.getElementById("edit_purchase_subcategory").value = btn.dataset.subcategory || "";
-  document.getElementById("edit_purchase_supplier").value = btn.dataset.supplier;
-  document.getElementById("edit_purchase_qty").value = btn.dataset.qty;
-  document.getElementById("edit_purchase_price").value = btn.dataset.price;
-  document.getElementById("edit_purchase_date").value = btn.dataset.date;
+  if (btn.dataset.subcategory) {
+    document.getElementById("edit_purchase_subcategory").value = btn.dataset.subcategory;
+  }
+  document.getElementById("edit_purchase_supplier").value = btn.dataset.supplier || "";
+  document.getElementById("edit_purchase_qty").value = btn.dataset.qty || "";
+  if (btn.dataset.unit) {
+    document.getElementById("edit_purchase_unit").value = btn.dataset.unit;
+  }
+  document.getElementById("edit_purchase_price").value = btn.dataset.price || "";
+  document.getElementById("edit_purchase_date").value = btn.dataset.date || "";
 });
 
 const purchasesInput = document.getElementById("purchasesSearch");
@@ -386,7 +466,7 @@ function filterPurchases() {
   }
 }
 
-if (searchInput = document.getElementById("purchasesSearch")) {
+if (purchasesInput) {
   purchasesInput.addEventListener("input", filterPurchases);
   clearPurchasesBtn.addEventListener("click", function() {
     purchasesInput.value = "";

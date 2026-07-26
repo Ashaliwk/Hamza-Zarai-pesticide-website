@@ -48,16 +48,8 @@ require_once 'includes/header.php';
 
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
   <div>
-    <h1 class="page-title">Products</h1>
-    <p class="page-subtitle">Manage your product inventory & subcategories</p>
-  </div>
-  <div class="d-flex gap-2">
-    <!-- <button class="btn btn-outline-success fw-semibold" data-bs-toggle="modal" data-bs-target="#addProductSubCategoryModal">
-      <i class="fa-solid fa-folder-plus me-1"></i> Add Subcategory
-    </button> -->
-    <button class="btn btn-brand fw-semibold" data-bs-toggle="modal" data-bs-target="#addProductModal">
-      <i class="fa-solid fa-plus me-1"></i> Add Product
-    </button>
+    <h1 class="page-title">Products & Inventory Stock</h1>
+    <p class="page-subtitle">View existing stock purchased and adjust prices & thresholds</p>
   </div>
 </div>
 

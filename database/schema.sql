@@ -122,6 +122,7 @@ CREATE TABLE purchases (
     subcategory_id INT DEFAULT NULL,
     supplier_name VARCHAR(150) NOT NULL,
     quantity DECIMAL(12,2) NOT NULL,
+    unit VARCHAR(20) DEFAULT NULL,
     price_per_unit DECIMAL(12,2) NOT NULL,
     total DECIMAL(14,2) NOT NULL,
     purchase_date DATE NOT NULL,
@@ -130,5 +131,5 @@ CREATE TABLE purchases (
     FOREIGN KEY (subcategory_id) REFERENCES subcategories(id) ON DELETE SET NULL
 );
 
-INSERT INTO purchases (product_id, supplier_name, quantity, price_per_unit, total, purchase_date) VALUES
-(1, 'Shafqat', 10, 1200.00, 12000.00, CURDATE());
+INSERT INTO purchases (product_id, supplier_name, quantity, unit, price_per_unit, total, purchase_date) VALUES
+(1, 'Shafqat', 10, 'kg', 1200.00, 12000.00, CURDATE());
