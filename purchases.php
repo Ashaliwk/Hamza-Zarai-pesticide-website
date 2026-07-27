@@ -84,8 +84,8 @@ require_once 'includes/header.php';
     <thead>
       <tr>
         <th>Date</th>
-        <th>Product</th>
         <th>Subcategory</th>
+        <th>Category</th>
         <th>Supplier</th>
         <th>Quantity</th>
         <th>Price/Unit</th>
@@ -101,15 +101,17 @@ require_once 'includes/header.php';
       <?php foreach ($purchases as $p): ?>
       <tr class="purchase-row">
         <td><?= date('n/j/Y', strtotime($p['purchase_date'])) ?></td>
-        <td class="fw-semibold"><?= e($p['product_name']) ?></td>
-        <td>
+        <td class="fw-bold text-dark">
           <?php if (!empty($p['subcategory_name'])): ?>
-            <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle fw-semibold" style="font-size:0.8rem;">
-              <i class="fa-solid fa-tag me-1 text-success" style="font-size:0.7rem;"></i><?= e($p['subcategory_name']) ?>
+            <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle fw-semibold px-2 py-1" style="font-size:0.85rem;">
+              <i class="fa-solid fa-tag me-1 text-success" style="font-size:0.75rem;"></i><?= e($p['subcategory_name']) ?>
             </span>
           <?php else: ?>
-            <span class="text-muted small">&mdash;</span>
+            <span class="fw-semibold text-dark"><?= e($p['product_name']) ?></span>
           <?php endif; ?>
+        </td>
+        <td>
+          <span class="badge-cat"><?= e($p['category_name'] ?: 'General') ?></span>
         </td>
         <td><?= e($p['supplier_name']) ?></td>
         <td><?= rtrim(rtrim(number_format($p['quantity'],2), '0'), '.') ?> <?= e($p['product_unit'] ?? '') ?></td>
@@ -175,18 +177,14 @@ require_once 'includes/header.php';
               <i class="fa-solid fa-plus me-1"></i>New Subcategory
             </button>
           </div>
-          <select name="subcategory_id" id="add_purchase_subcategory" class="form-select">
-            <option value="">-- Select Subcategory (Optional) --</option>
+          <select name="subcategory_id" id="add_purchase_subcategory" class="form-select" required>
+            <option value="">-- Select Subcategory --</option>
             <?php foreach ($subcategories as $sub): ?>
               <option value="<?= $sub['id'] ?>" data-category="<?= $sub['category_id'] ?>">
                 <?= e($sub['name']) ?> (<?= e($sub['category_name']) ?>)
               </option>
             <?php endforeach; ?>
           </select>
-        </div>
-        <div class="mb-3">
-          <label class="form-label small fw-semibold">Item / Product Name</label>
-          <input type="text" name="product_name" id="add_purchase_product_name" class="form-control" required  list="existing_products_list" autocomplete="off">
         </div>
         <div class="mb-3">
           <label class="form-label small fw-semibold">Supplier Name</label>
@@ -253,18 +251,14 @@ require_once 'includes/header.php';
               <i class="fa-solid fa-plus me-1"></i>New Subcategory
             </button>
           </div>
-          <select name="subcategory_id" id="edit_purchase_subcategory" class="form-select">
-            <option value="">-- Select Subcategory (Optional) --</option>
+          <select name="subcategory_id" id="edit_purchase_subcategory" class="form-select" required>
+            <option value="">-- Select Subcategory --</option>
             <?php foreach ($subcategories as $sub): ?>
               <option value="<?= $sub['id'] ?>" data-category="<?= $sub['category_id'] ?>">
                 <?= e($sub['name']) ?> (<?= e($sub['category_name']) ?>)
               </option>
             <?php endforeach; ?>
           </select>
-        </div>
-        <div class="mb-3">
-          <label class="form-label small fw-semibold">Item / Product Name</label>
-          <input type="text" name="product_name" id="edit_purchase_product_name" class="form-control" required placeholder="Enter product name" list="existing_products_list" autocomplete="off">
         </div>
         <div class="mb-3">
           <label class="form-label small fw-semibold">Supplier Name</label>

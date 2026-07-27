@@ -68,11 +68,11 @@ require_once 'includes/header.php';
   <table class="table table-clean mb-0">
     <thead>
       <tr>
-        <th>Product</th>
-        <th>Subcategory (Category)</th>
+        <th>Subcategory / Item</th>
+        <th>Category</th>
         <th>Purchase Price</th>
         <th>Selling Price</th>
-        <th>Quantity</th>
+        <th>Quantity Stock</th>
         <th>Profit Margin</th>
         <th class="text-end">Actions</th>
       </tr>
@@ -87,20 +87,17 @@ require_once 'includes/header.php';
               ? (($p['selling_price'] - $p['purchase_price']) / $p['purchase_price']) * 100
               : 0;
           $isLow = $p['quantity'] <= $p['low_stock_threshold'];
+          $displayName = !empty($p['subcategory_name']) ? $p['subcategory_name'] : $p['name'];
       ?>
       <tr class="product-row">
         <td>
-          <div class="fw-semibold"><?= e($p['name']) ?></div>
+          <div class="fw-bold text-dark d-flex align-items-center gap-2">
+            <?= e($displayName) ?>
+          </div>
           <div class="text-muted small"><?= e($p['sku']) ?></div>
         </td>
         <td>
-          <?php if (!empty($p['subcategory_name'])): ?>
-            <span class="badge-cat">
-              <?= e($p['subcategory_name']) ?> <span class="text-muted opacity-75 fw-normal">(<?= e($p['category_name']) ?>)</span>
-            </span>
-          <?php else: ?>
-            <span class="badge-cat"><?= e($p['category_name']) ?></span>
-          <?php endif; ?>
+          <span class="badge-cat"><?= e($p['category_name']) ?></span>
         </td>
         <td><?= money($p['purchase_price']) ?></td>
         <td><?= money($p['selling_price']) ?></td>

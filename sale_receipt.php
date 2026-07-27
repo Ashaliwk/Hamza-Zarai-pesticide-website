@@ -6,9 +6,11 @@ require_login();
 $id = (int)($_GET['id'] ?? 0);
 
 $stmt = $pdo->prepare("
-    SELECT s.*, p.name AS product_name, p.unit AS product_unit
+    SELECT s.*, p.name AS product_name, p.unit AS product_unit, c.name AS category_name, sc.name AS subcategory_name
     FROM sales s
     JOIN products p ON p.id = s.product_id
+    LEFT JOIN categories c ON c.id = p.category_id
+    LEFT JOIN subcategories sc ON sc.id = p.subcategory_id
     WHERE s.id = ?
 ");
 $stmt->execute([$id]);
@@ -140,7 +142,7 @@ $dueAmount     = (float)($sale['due_amount'] ?? 0.00);
         <tr>
           <td class="fw-semibold">1</td>
           <td>
-            <strong class="text-dark fs-6"><?= e($sale['product_name']) ?></strong>
+            <strong class="text-dark fs-6"><?= e(!empty($sale['subcategory_name']) ? $sale['subcategory_name'] . ' (' . ($sale['category_name'] ?: 'General') . ')' : $sale['product_name']) ?></strong>
             <div class="text-muted small">Unit Type: <?= e($sale['product_unit'] ?? 'Unit') ?></div>
           </td>
           <td class="text-center fw-semibold fs-6">

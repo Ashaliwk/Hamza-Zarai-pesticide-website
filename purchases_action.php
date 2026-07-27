@@ -21,6 +21,23 @@ if ($action === 'add') {
     $date           = $_POST['purchase_date'] ?? date('Y-m-d');
     $total          = $qty * $price;
 
+    if (empty($product_name) && $subcategory_id) {
+        $subStmt = $pdo->prepare("SELECT s.name, s.category_id FROM subcategories s WHERE s.id = ?");
+        $subStmt->execute([$subcategory_id]);
+        $subData = $subStmt->fetch();
+        if ($subData) {
+            $product_name = $subData['name'];
+            if (!$category_id) {
+                $category_id = (int)$subData['category_id'];
+            }
+        }
+    }
+    if (empty($product_name) && $category_id) {
+        $catStmt = $pdo->prepare("SELECT name FROM categories WHERE id = ?");
+        $catStmt->execute([$category_id]);
+        $product_name = $catStmt->fetchColumn() ?: 'General Product';
+    }
+
     if ($product_name === '' || $supplier === '' || $qty <= 0) {
         flash_set('error', 'Please fill all required fields.');
         header('Location: purchases.php');
@@ -72,6 +89,23 @@ if ($action === 'add') {
     $price          = (float)($_POST['price_per_unit'] ?? 0);
     $date           = $_POST['purchase_date'] ?? date('Y-m-d');
     $total          = $qty * $price;
+
+    if (empty($product_name) && $subcategory_id) {
+        $subStmt = $pdo->prepare("SELECT s.name, s.category_id FROM subcategories s WHERE s.id = ?");
+        $subStmt->execute([$subcategory_id]);
+        $subData = $subStmt->fetch();
+        if ($subData) {
+            $product_name = $subData['name'];
+            if (!$category_id) {
+                $category_id = (int)$subData['category_id'];
+            }
+        }
+    }
+    if (empty($product_name) && $category_id) {
+        $catStmt = $pdo->prepare("SELECT name FROM categories WHERE id = ?");
+        $catStmt->execute([$category_id]);
+        $product_name = $catStmt->fetchColumn() ?: 'General Product';
+    }
 
     if ($id <= 0 || $product_name === '' || $supplier === '' || $qty <= 0) {
         flash_set('error', 'Please fill all required fields.');

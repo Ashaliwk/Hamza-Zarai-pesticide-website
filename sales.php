@@ -10,7 +10,13 @@ $currentMonthKey = date('Y-m');
 $selectedMonth   = trim($_GET['month'] ?? $currentMonthKey);
 $search          = trim($_GET['search'] ?? '');
 
-$products = $pdo->query("SELECT id, name, selling_price, quantity, unit FROM products ORDER BY name")->fetchAll();
+$products = $pdo->query("
+    SELECT p.*, c.name AS category_name, sc.name AS subcategory_name
+    FROM products p
+    LEFT JOIN categories c ON c.id = p.category_id
+    LEFT JOIN subcategories sc ON sc.id = p.subcategory_id
+    ORDER BY c.name, sc.name, p.name
+")->fetchAll();
 
 // Available months from sales table
 $availableMonths = $pdo->query("
@@ -28,15 +34,18 @@ if ($selectedMonth !== 'all') {
 }
 
 if ($search !== '') {
-    $whereConditions[] = "(p.name LIKE :search OR s.customer_name LIKE :search OR s.sale_date LIKE :search OR s.payment_status LIKE :search)";
+    $whereConditions[] = "(p.name LIKE :search OR sc.name LIKE :search OR c.name LIKE :search OR s.customer_name LIKE :search OR s.sale_date LIKE :search OR s.payment_status LIKE :search)";
     $params[':search'] = "%$search%";
 }
 
 $whereSql = count($whereConditions) > 0 ? "WHERE " . implode(' AND ', $whereConditions) : "";
 
 $stmt = $pdo->prepare("
-    SELECT s.*, p.name AS product_name, p.unit AS product_unit
-    FROM sales s JOIN products p ON p.id = s.product_id
+    SELECT s.*, p.name AS product_name, p.unit AS product_unit, c.name AS category_name, sc.name AS subcategory_name
+    FROM sales s 
+    JOIN products p ON p.id = s.product_id
+    LEFT JOIN categories c ON c.id = p.category_id
+    LEFT JOIN subcategories sc ON sc.id = p.subcategory_id
     {$whereSql}
     ORDER BY s.sale_date DESC, s.id DESC
 ");
@@ -57,7 +66,7 @@ foreach ($sales as $s) {
 
 // Disciplined Monthly Sales Archive (sales of all months formatted)
 $monthlySalesArchive = $pdo->query("
-    SELECT 
+    SELECT
         DATE_FORMAT(s.sale_date, '%Y-%m') AS month_key,
         DATE_FORMAT(s.sale_date, '%M %Y') AS month_name,
         COUNT(s.id) AS total_orders,
@@ -110,8 +119,8 @@ require_once 'includes/header.php';
 </div>
 
 <?php
-  $periodLabel = ($selectedMonth === 'all') 
-    ? 'All Time' 
+  $periodLabel = ($selectedMonth === 'all')
+    ? 'All Time'
     : date('F Y', strtotime($selectedMonth . '-01'));
 ?>
 
@@ -171,7 +180,8 @@ require_once 'includes/header.php';
     <thead>
       <tr>
         <th>Date</th>
-        <th>Product</th>
+        <th>Subcategory</th>
+        <th>Category</th>
         <th>Customer</th>
         <th>Quantity</th>
         <th>Price/Unit</th>
@@ -183,17 +193,21 @@ require_once 'includes/header.php';
     </thead>
     <tbody>
       <?php if (!$sales): ?>
-        <tr><td colspan="9" class="text-center text-muted py-4">No sales found.</td></tr>
+        <tr><td colspan="10" class="text-center text-muted py-4">No sales found.</td></tr>
       <?php endif; ?>
-      <tr id="noMatchSalesRow" style="display:none;"><td colspan="9" class="text-center text-muted py-4">No matching sales recorded.</td></tr>
-      <?php foreach ($sales as $s): 
+      <tr id="noMatchSalesRow" style="display:none;"><td colspan="10" class="text-center text-muted py-4">No matching sales recorded.</td></tr>
+      <?php foreach ($sales as $s):
         $st = $s['payment_status'] ?? 'paid';
         $paid = (float)($s['paid_amount'] ?? $s['total']);
         $due = (float)($s['due_amount'] ?? 0.00);
 
+        $displayName = !empty($s['subcategory_name']) 
+          ? $s['subcategory_name'] . (!empty($s['category_name']) ? ' (' . $s['category_name'] . ')' : '')
+          : $s['product_name'];
+
         $salePayload = [
           'id' => $s['id'],
-          'product' => $s['product_name'],
+          'product' => $displayName,
           'customer' => $s['customer_name'],
           'qty' => rtrim(rtrim(number_format($s['quantity'],2), '0'), '.'),
           'unit' => $s['product_unit'] ?? '',
@@ -208,7 +222,18 @@ require_once 'includes/header.php';
       ?>
       <tr class="sale-row">
         <td><?= date('n/j/Y', strtotime($s['sale_date'])) ?></td>
-        <td><?= e($s['product_name']) ?></td>
+        <td class="fw-bold text-dark">
+          <?php if (!empty($s['subcategory_name'])): ?>
+            <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle fw-semibold px-2 py-1" style="font-size:0.85rem;">
+              <i class="fa-solid fa-tag me-1 text-success" style="font-size:0.75rem;"></i><?= e($s['subcategory_name']) ?>
+            </span>
+          <?php else: ?>
+            <span class="fw-semibold text-dark"><?= e($s['product_name']) ?></span>
+          <?php endif; ?>
+        </td>
+        <td>
+          <span class="badge-cat"><?= e($s['category_name'] ?: 'General') ?></span>
+        </td>
         <td><?= e($s['customer_name']) ?></td>
         <td><?= rtrim(rtrim(number_format($s['quantity'],2), '0'), '.') ?> <?= e($s['product_unit'] ?? '') ?></td>
         <td><?= money($s['price_per_unit']) ?></td>
@@ -264,13 +289,12 @@ require_once 'includes/header.php';
   </div>
 </div>
 
-<!-- Disciplined Monthly Sales Archive & Breakdown Table -->
 <div class="panel mt-4">
   <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-      <h5 class="panel-title mb-1 d-flex align-items-center gap-2">
-        <i class="fa-solid fa-boxes-stacked text-success"></i> Monthly Sales Archive & Breakdown
-      </h5>
+      <h3 class="panel-title mb-1 d-flex align-items-center gap-2">
+        <i class="fa-solid fa-boxes-stacked text-success"></i> Monthly Sales
+      </h3>
       <p class="text-muted small mb-0">Disciplined historical log of all monthly sales volumes, collections, dues, and profits</p>
     </div>
     <?php if ($selectedMonth !== 'all'): ?>
@@ -297,7 +321,7 @@ require_once 'includes/header.php';
         <?php if (!$monthlySalesArchive): ?>
           <tr><td colspan="8" class="text-center text-muted py-4">No monthly sales records logged.</td></tr>
         <?php else: ?>
-          <?php foreach ($monthlySalesArchive as $ma): 
+          <?php foreach ($monthlySalesArchive as $ma):
             $isCurrent = ($ma['month_key'] === $currentMonthKey);
             $isSelected = ($ma['month_key'] === $selectedMonth);
           ?>
@@ -339,7 +363,6 @@ require_once 'includes/header.php';
   </div>
 </div>
 
-<!-- Record Sale Modal -->
 <div class="modal fade" id="addSaleModal" tabindex="-1">
   <div class="modal-dialog">
     <form method="POST" action="sales_action.php" class="modal-content">
@@ -350,12 +373,14 @@ require_once 'includes/header.php';
       </div>
       <div class="modal-body">
         <div class="mb-3">
-          <label class="form-label small fw-semibold">Product</label>
+          <label class="form-label small fw-semibold">Subcategory & Category</label>
           <select name="product_id" id="sale_product" class="form-select" required onchange="fillSalePrice(); calculateSaleDue('add');">
-            <option value="">Select product...</option>
-            <?php foreach ($products as $p): ?>
+            <option value="">Select subcategory / item...</option>
+            <?php foreach ($products as $p): 
+              $pLabel = !empty($p['subcategory_name']) ? $p['subcategory_name'] . ' (' . ($p['category_name'] ?: 'General') . ')' : $p['name'];
+            ?>
               <option value="<?= $p['id'] ?>" data-price="<?= $p['selling_price'] ?>" data-stock="<?= $p['quantity'] ?>" data-unit="<?= e($p['unit']) ?>">
-                <?= e($p['name']) ?> (<?= rtrim(rtrim(number_format($p['quantity'],2),'0'),'.') ?> <?= e($p['unit']) ?> in stock)
+                <?= e($pLabel) ?> (<?= rtrim(rtrim(number_format($p['quantity'],2),'0'),'.') ?> <?= e($p['unit']) ?> in stock)
               </option>
             <?php endforeach; ?>
           </select>
@@ -374,7 +399,7 @@ require_once 'includes/header.php';
             <input type="number" step="0.01" name="price_per_unit" id="sale_price" class="form-control" required oninput="calculateSaleDue('add')">
           </div>
         </div>
-        
+
         <div class="row">
           <div class="col-6 mb-3">
             <label class="form-label small fw-semibold">Payment Status</label>
@@ -420,12 +445,14 @@ require_once 'includes/header.php';
       </div>
       <div class="modal-body">
         <div class="mb-3">
-          <label class="form-label small fw-semibold">Product</label>
+          <label class="form-label small fw-semibold">Subcategory & Category</label>
           <select name="product_id" id="edit_sale_product" class="form-select" required onchange="fillEditSalePrice(); calculateSaleDue('edit');">
-            <option value="">Select product...</option>
-            <?php foreach ($products as $p): ?>
+            <option value="">Select subcategory / item...</option>
+            <?php foreach ($products as $p): 
+              $pLabel = !empty($p['subcategory_name']) ? $p['subcategory_name'] . ' (' . ($p['category_name'] ?: 'General') . ')' : $p['name'];
+            ?>
               <option value="<?= $p['id'] ?>" data-price="<?= $p['selling_price'] ?>" data-stock="<?= $p['quantity'] ?>" data-unit="<?= e($p['unit']) ?>">
-                <?= e($p['name']) ?> (<?= rtrim(rtrim(number_format($p['quantity'],2),'0'),'.') ?> <?= e($p['unit']) ?> in stock)
+                <?= e($pLabel) ?> (<?= rtrim(rtrim(number_format($p['quantity'],2),'0'),'.') ?> <?= e($p['unit']) ?> in stock)
               </option>
             <?php endforeach; ?>
           </select>
@@ -671,7 +698,7 @@ document.getElementById("editSaleModal")?.addEventListener("show.bs.modal", func
   document.getElementById("edit_sale_qty").value = btn.dataset.qty;
   document.getElementById("edit_sale_price").value = btn.dataset.price;
   document.getElementById("edit_sale_date").value = btn.dataset.date;
-  
+
   const st = btn.dataset.status || "paid";
   document.getElementById("edit_sale_payment_status").value = st;
   document.getElementById("edit_sale_paid_amount").value = btn.dataset.paid || "";
@@ -692,7 +719,7 @@ function populateReceiptModal(data) {
   document.getElementById("rec_total").textContent = "Rs " + data.total;
   document.getElementById("rec_subtotal").textContent = "Rs " + data.total;
   document.getElementById("rec_paid").textContent = "Rs " + data.paid_amount;
-  
+
   const dueEl = document.getElementById("rec_due");
   const dueVal = parseFloat(data.due_amount.replace(/,/g, ""));
   dueEl.textContent = "Rs " + data.due_amount;
@@ -758,7 +785,7 @@ const noMatchSalesRow = document.getElementById("noMatchSalesRow");
 function filterSales() {
   const query = salesInput.value.toLowerCase().trim();
   clearSalesBtn.style.display = query.length > 0 ? "flex" : "none";
-  
+
   let visibleCount = 0;
   salesRows.forEach(row => {
     const text = row.innerText.toLowerCase();
@@ -773,7 +800,7 @@ function filterSales() {
   if (salesCount) {
     salesCount.textContent = visibleCount + (visibleCount === 1 ? " sale found" : " sales found");
   }
-  
+
   if (noMatchSalesRow) {
     noMatchSalesRow.style.display = (visibleCount === 0 && salesRows.length > 0) ? "" : "none";
   }
@@ -787,6 +814,45 @@ if (salesInput) {
     salesInput.focus();
   });
 }
-</script>';
+</script>
+
+<style media="print">
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  #saleReceiptModal, #saleReceiptModal * {
+    visibility: visible !important;
+  }
+  #saleReceiptModal {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+  .modal-dialog {
+    max-width: 100% !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+  .modal-content {
+    border: none !important;
+    box-shadow: none !important;
+  }
+  .modal-header, .modal-footer, .no-print, .btn, .btn-close, nav, sidebar, header, .sidebar-wrapper, .topbar {
+    display: none !important;
+  }
+  #printableInvoiceArea {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 10px !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+}
+</style>';
 require_once 'includes/footer.php';
 ?>
