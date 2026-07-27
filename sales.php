@@ -42,7 +42,7 @@ $whereSql = count($whereConditions) > 0 ? "WHERE " . implode(' AND ', $whereCond
 
 $stmt = $pdo->prepare("
     SELECT s.*, p.name AS product_name, p.unit AS product_unit, c.name AS category_name, sc.name AS subcategory_name
-    FROM sales s 
+    FROM sales s
     JOIN products p ON p.id = s.product_id
     LEFT JOIN categories c ON c.id = p.category_id
     LEFT JOIN subcategories sc ON sc.id = p.subcategory_id
@@ -201,7 +201,7 @@ require_once 'includes/header.php';
         $paid = (float)($s['paid_amount'] ?? $s['total']);
         $due = (float)($s['due_amount'] ?? 0.00);
 
-        $displayName = !empty($s['subcategory_name']) 
+        $displayName = !empty($s['subcategory_name'])
           ? $s['subcategory_name'] . (!empty($s['category_name']) ? ' (' . $s['category_name'] . ')' : '')
           : $s['product_name'];
 
@@ -376,7 +376,7 @@ require_once 'includes/header.php';
           <label class="form-label small fw-semibold">Subcategory & Category</label>
           <select name="product_id" id="sale_product" class="form-select" required onchange="fillSalePrice(); calculateSaleDue('add');">
             <option value="">Select subcategory / item...</option>
-            <?php foreach ($products as $p): 
+            <?php foreach ($products as $p):
               $pLabel = !empty($p['subcategory_name']) ? $p['subcategory_name'] . ' (' . ($p['category_name'] ?: 'General') . ')' : $p['name'];
             ?>
               <option value="<?= $p['id'] ?>" data-price="<?= $p['selling_price'] ?>" data-stock="<?= $p['quantity'] ?>" data-unit="<?= e($p['unit']) ?>">
@@ -448,7 +448,7 @@ require_once 'includes/header.php';
           <label class="form-label small fw-semibold">Subcategory & Category</label>
           <select name="product_id" id="edit_sale_product" class="form-select" required onchange="fillEditSalePrice(); calculateSaleDue('edit');">
             <option value="">Select subcategory / item...</option>
-            <?php foreach ($products as $p): 
+            <?php foreach ($products as $p):
               $pLabel = !empty($p['subcategory_name']) ? $p['subcategory_name'] . ' (' . ($p['category_name'] ?: 'General') . ')' : $p['name'];
             ?>
               <option value="<?= $p['id'] ?>" data-price="<?= $p['selling_price'] ?>" data-stock="<?= $p['quantity'] ?>" data-unit="<?= e($p['unit']) ?>">
@@ -522,10 +522,10 @@ require_once 'includes/header.php';
             <div>
               <div class="d-flex align-items-center gap-2 mb-1">
                 <span style="font-size: 1.8rem;">🌱</span>
-                <h3 class="fw-extrabold mb-0" style="color: #14532d; font-weight:800; letter-spacing:-0.5px;"><?= e($company) ?></h3>
+                <h3 class="fw-extrabold mb-0" style="color: #14532d; font-weight:800; letter-spacing:-0.5px;">Hamza Zarai Services</h3>
               </div>
-              <p class="text-muted small mb-0">Quality Agricultural Pesticides & Fertilizers</p>
-              <p class="text-muted small mb-0"><i class="fa-solid fa-location-dot me-1"></i> Main Agricultural Market, Pakistan</p>
+              <p class="text-muted small mb-1"><i class="fa-solid fa-location-dot me-1 text-success"></i>Ada Norpur, Pakpattan</p>
+              <p class="text-muted small mb-0"><i class="fa-solid fa-phone me-1 text-success"></i> Contact: +92 300 6901657 </p>
             </div>
             <div class="text-end">
               <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fw-semibold rounded-pill mb-2">
@@ -604,7 +604,7 @@ require_once 'includes/header.php';
           <div class="row pt-3 mt-3 border-top align-items-end">
             <div class="col-7">
               <p class="small text-muted mb-1"><strong>Terms:</strong> All sales are final. Retain invoice for records.</p>
-              <p class="small text-muted mb-0">Thank you for doing business with <?= e($company) ?>!</p>
+              <p class="small text-muted mb-0">Thank you for having Hamza Zarai services!</p>
             </div>
             <div class="col-5 text-end">
               <div style="border-bottom: 1px dashed #94a3b8; width: 150px; display: inline-block; margin-bottom: 5px;"></div>
@@ -755,12 +755,12 @@ function downloadRowPDF(data) {
   populateReceiptModal(data);
   const element = document.getElementById("printableInvoiceArea");
   const padId = String(data.id).padStart(4, "0");
-  const custName = data.customer.replace(/[^A-Za-z0-9]/g, "_");
+  const custName = (data.customer || "Customer").replace(/[^A-Za-z0-9]/g, "_");
   const opt = {
-    margin:       10,
+    margin:       [8, 8, 8, 8],
     filename:     "Sale-Invoice-#INV-S-" + padId + "-" + custName + ".pdf",
     image:        { type: "jpeg", quality: 0.98 },
-    html2canvas:  { scale: 2, useCORS: true },
+    html2canvas:  { scale: 2, useCORS: true, logging: false },
     jsPDF:        { unit: "mm", format: "a4", orientation: "portrait" }
   };
   html2pdf().set(opt).from(element).save();

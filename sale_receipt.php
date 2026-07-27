@@ -60,13 +60,25 @@ $dueAmount     = (float)($sale['due_amount'] ?? 0.00);
     padding: 12px 24px;
   }
   @media print {
-    body { background: #fff !important; }
+    @page {
+      size: A4 portrait;
+      margin: 8mm 10mm;
+    }
+    body { 
+      background: #ffffff !important; 
+      margin: 0 !important; 
+      padding: 0 !important; 
+    }
     .no-print, .top-action-bar { display: none !important; }
     .receipt-card {
       box-shadow: none !important;
-      border: none !important;
-      margin: 0 !important;
+      border: 1px solid #cbd5e1 !important;
+      margin: 0 auto !important;
+      padding: 24px !important;
       max-width: 100% !important;
+      width: 100% !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
     }
   }
 </style>
@@ -195,10 +207,10 @@ $dueAmount     = (float)($sale['due_amount'] ?? 0.00);
 function downloadPDF() {
   const element = document.getElementById('receiptContent');
   const opt = {
-    margin:       10,
+    margin:       [8, 8, 8, 8],
     filename:     'Sale-Invoice-#INV-S-<?= sprintf('%04d', $sale['id']) ?>-<?= preg_replace('/[^A-Za-z0-9]/', '_', $sale['customer_name']) ?>.pdf',
     image:        { type: 'jpeg', quality: 0.98 },
-    html2canvas:  { scale: 2, useCORS: true },
+    html2canvas:  { scale: 2, useCORS: true, logging: false },
     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
   };
   html2pdf().set(opt).from(element).save();

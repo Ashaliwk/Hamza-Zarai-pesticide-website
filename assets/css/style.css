@@ -161,30 +161,97 @@ body {
 .icon-btn.pdf:hover  { background: #fef2f2; color: #dc2626; border-color: #fca5a5; }
 .icon-btn.print:hover{ background: #f0fdf4; color: #16a34a; border-color: #86efac; }
 
-/* Print rules */
+/* Print rules - Clean single-page invoice printing */
 @media print {
-  body {
-    background: #fff !important;
-    color: #000 !important;
+  @page {
+    size: A4 portrait;
+    margin: 8mm 10mm;
   }
-  .sidebar, .d-flex.justify-content-between, .search-box, .no-print, .btn, .modal-footer, .modal-header .btn-close, .sidebar-footer {
+  
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    font-size: 12pt !important;
+  }
+
+  /* Hide UI elements and page background clutter */
+  .sidebar, 
+  .no-print, 
+  .btn, 
+  .search-box, 
+  .modal-header, 
+  .modal-footer, 
+  .sidebar-footer,
+  .modal-backdrop,
+  body > *:not(#saleReceiptModal):not(#receiptContent):not(.receipt-card),
+  .main-content > *:not(#saleReceiptModal) {
     display: none !important;
   }
+
+  /* When printing within sales.php modal */
   .main-content {
-    margin-left: 0 !important;
+    margin: 0 !important;
     padding: 0 !important;
   }
+
+  .modal {
+    position: static !important;
+    display: block !important;
+    overflow: visible !important;
+    width: 100% !important;
+    height: auto !important;
+    background: transparent !important;
+    z-index: auto !important;
+  }
+
   .modal-dialog {
     max-width: 100% !important;
     margin: 0 !important;
+    padding: 0 !important;
+    transform: none !important;
   }
+
   .modal-content {
     border: none !important;
     box-shadow: none !important;
-  }
-  #printableInvoiceArea {
-    border: none !important;
+    background: #ffffff !important;
     padding: 0 !important;
+  }
+
+  #printableInvoiceArea, .receipt-card, #receiptContent {
+    display: block !important;
+    visibility: visible !important;
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .invoice-box {
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    padding: 20px !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  table {
+    page-break-inside: avoid !important;
+  }
+
+  .badge {
+    border: 1px solid #000 !important;
+    color: #000 !important;
+    background: none !important;
   }
 }
 
