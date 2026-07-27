@@ -57,7 +57,7 @@ require_once 'includes/header.php';
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <div class="search-box position-relative" style="max-width: 320px; width: 100%;">
       <i class="fa-solid fa-magnifying-glass search-icon"></i>
-      <input type="text" id="productSearch" class="form-control search-input" placeholder="Search product, subcategory, category..." value="<?= e($search) ?>" autocomplete="off">
+      <input type="text" id="productSearch" class="form-control search-input" placeholder="Search subcategory, category..." value="<?= e($search) ?>" autocomplete="off">
       <button class="search-clear-btn" id="clearSearch" type="button" style="display: <?= $search !== '' ? 'flex' : 'none' ?>;"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div class="text-muted small" id="searchCount">
