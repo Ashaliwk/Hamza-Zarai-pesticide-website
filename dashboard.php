@@ -6,15 +6,48 @@ require_login();
 $pageTitle    = 'Dashboard';
 $activeNav    = 'dashboard';
 
+$currentMonthKey   = date('Y-m');
+$currentMonthLabel = date('F Y');
+
 $totalProducts = $pdo->query("SELECT COUNT(*) FROM products")->fetchColumn();
 
-$totalSales = $pdo->query("SELECT COALESCE(SUM(total),0) FROM sales")->fetchColumn();
+// Current Month Total Sales
+$stmtMonthSales = $pdo->prepare("SELECT COALESCE(SUM(total),0) FROM sales WHERE DATE_FORMAT(sale_date, '%Y-%m') = ?");
+$stmtMonthSales->execute([$currentMonthKey]);
+$monthTotalSales = $stmtMonthSales->fetchColumn();
 
-// Profit = SUM( (price_per_unit - purchase_price) * quantity ) across all sales
-$totalProfit = $pdo->query("
+// Current Month Total Profit
+$stmtMonthProfit = $pdo->prepare("
     SELECT COALESCE(SUM((s.price_per_unit - p.purchase_price) * s.quantity),0)
     FROM sales s JOIN products p ON p.id = s.product_id
-")->fetchColumn();
+    WHERE DATE_FORMAT(s.sale_date, '%Y-%m') = ?
+");
+$stmtMonthProfit->execute([$currentMonthKey]);
+$monthTotalProfit = $stmtMonthProfit->fetchColumn();
+
+// Current Month Sales Volume (Units Sold)
+$stmtMonthVolume = $pdo->prepare("SELECT COALESCE(SUM(quantity),0) FROM sales WHERE DATE_FORMAT(sale_date, '%Y-%m') = ?");
+$stmtMonthVolume->execute([$currentMonthKey]);
+$monthSalesVolume = $stmtMonthVolume->fetchColumn();
+
+$allTimeSales = $pdo->query("SELECT COALESCE(SUM(total),0) FROM sales")->fetchColumn();
+
+// Disciplined Monthly Breakdown of Sales
+$monthlySalesBreakdown = $pdo->query("
+    SELECT 
+        DATE_FORMAT(s.sale_date, '%Y-%m') AS month_key,
+        DATE_FORMAT(s.sale_date, '%M %Y') AS month_name,
+        COUNT(s.id) AS total_orders,
+        COALESCE(SUM(s.quantity), 0) AS total_units,
+        COALESCE(SUM(s.total), 0) AS total_sales,
+        COALESCE(SUM(s.paid_amount), 0) AS total_paid,
+        COALESCE(SUM(s.due_amount), 0) AS total_due,
+        COALESCE(SUM((s.price_per_unit - p.purchase_price) * s.quantity), 0) AS total_profit
+    FROM sales s
+    LEFT JOIN products p ON p.id = s.product_id
+    GROUP BY month_key, month_name
+    ORDER BY month_key DESC
+")->fetchAll();
 
 $lowStockProducts = $pdo->query("
     SELECT p.*, c.name AS category_name
@@ -85,6 +118,7 @@ require_once 'includes/header.php';
       <div>
         <div class="stat-label">Total Products</div>
         <div class="stat-value"><?= (int)$totalProducts ?></div>
+        <div class="text-muted small mt-1" style="font-size: 0.76rem;">In inventory</div>
       </div>
       <div class="stat-icon icon-blue"><i class="fa-solid fa-cube"></i></div>
     </div>
@@ -92,8 +126,11 @@ require_once 'includes/header.php';
   <div class="col-6 col-lg-3">
     <div class="stat-card d-flex justify-content-between align-items-start">
       <div>
-        <div class="stat-label">Total Sales</div>
-        <div class="stat-value"><?= money($totalSales) ?></div>
+        <div class="stat-label">This Month Sales</div>
+        <div class="stat-value text-dark"><?= money($monthTotalSales) ?></div>
+        <div class="text-muted small mt-1" style="font-size: 0.76rem;" title="Resets every new month">
+          <i class="fa-regular fa-calendar-check me-1 text-success"></i><?= e($currentMonthLabel) ?>
+        </div>
       </div>
       <div class="stat-icon icon-green"><i class="fa-solid fa-cart-shopping"></i></div>
     </div>
@@ -101,11 +138,14 @@ require_once 'includes/header.php';
  <div class="col-6 col-lg-3">
     <div class="stat-card d-flex justify-content-between align-items-start">
         <div>
-            <div class="stat-label">Total Profit</div>
+            <div class="stat-label">This Month Profit</div>
 
             <!-- Hidden Profit -->
-            <div class="stat-value" id="profitAmount" data-value="<?= money($totalProfit) ?>" onclick="toggleProfit()" style="cursor:pointer;">
+            <div class="stat-value text-purple" id="profitAmount" data-value="<?= money($monthTotalProfit) ?>" onclick="toggleProfit()" style="cursor:pointer;">
                 ******
+            </div>
+            <div class="text-muted small mt-1" style="font-size: 0.76rem;">
+              <i class="fa-solid fa-arrow-trend-up me-1 text-purple"></i><?= e($currentMonthLabel) ?>
             </div>
         </div>
 
@@ -147,7 +187,7 @@ require_once 'includes/header.php';
   </div>
 </div>
 
-<div class="row g-3">
+<div class="row g-3 mb-4">
   <div class="col-lg-7">
     <div class="panel h-100">
       <div class="panel-title">Top Products by Sales</div>
@@ -172,6 +212,80 @@ require_once 'includes/header.php';
           </div>
         </div>
       <?php endforeach; ?>
+    </div>
+  </div>
+</div>
+
+<!-- Monthly Sales History & Breakdown Panel -->
+<div class="row g-3 mb-4">
+  <div class="col-12">
+    <div class="panel">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+          <h5 class="panel-title mb-1 d-flex align-items-center gap-2">
+            <i class="fa-solid fa-calendar-days text-success"></i> Monthly Sales History & Breakdown
+          </h5>
+          <p class="text-muted small mb-0">Disciplined archive of all past and current month sales (resets every month)</p>
+        </div>
+        <a href="sales.php" class="btn btn-sm btn-outline-success fw-semibold">
+          <i class="fa-solid fa-list me-1"></i> View All Sales
+        </a>
+      </div>
+      
+      <div class="table-responsive">
+        <table class="table table-clean align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Month & Year</th>
+              <th>Total Orders</th>
+              <th>Units Sold</th>
+              <th>Total Sales Volume</th>
+              <th>Amount Paid</th>
+              <th>Outstanding Due</th>
+              <th>Est. Profit</th>
+              <th class="text-end">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php if (!$monthlySalesBreakdown): ?>
+              <tr><td colspan="8" class="text-center text-muted py-4">No monthly sales recorded yet.</td></tr>
+            <?php else: ?>
+              <?php foreach ($monthlySalesBreakdown as $mb): 
+                $isCurrentMonth = ($mb['month_key'] === $currentMonthKey);
+              ?>
+                <tr>
+                  <td>
+                    <div class="fw-bold text-dark d-flex align-items-center gap-2">
+                      <?= e($mb['month_name']) ?>
+                      <?php if ($isCurrentMonth): ?>
+                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" style="font-size:0.7rem;">Active Month</span>
+                      <?php endif; ?>
+                    </div>
+                    <div class="text-muted small"><?= e($mb['month_key']) ?></div>
+                  </td>
+                  <td class="fw-semibold text-dark"><?= (int)$mb['total_orders'] ?> sale<?= (int)$mb['total_orders'] === 1 ? '' : 's' ?></td>
+                  <td class="fw-semibold"><?= rtrim(rtrim(number_format($mb['total_units'], 2), '0'), '.') ?></td>
+                  <td class="fw-bold text-dark"><?= money($mb['total_sales']) ?></td>
+                  <td class="text-success fw-semibold"><?= money($mb['total_paid']) ?></td>
+                  <td>
+                    <?php if ((float)$mb['total_due'] > 0): ?>
+                      <span class="text-danger fw-bold"><?= money($mb['total_due']) ?></span>
+                    <?php else: ?>
+                      <span class="text-muted">Rs 0.00</span>
+                    <?php endif; ?>
+                  </td>
+                  <td class="fw-bold text-primary"><?= money($mb['total_profit']) ?></td>
+                  <td class="text-end">
+                    <a href="sales.php?month=<?= e($mb['month_key']) ?>" class="btn btn-sm btn-light border fw-semibold text-muted">
+                      <i class="fa-solid fa-eye me-1"></i> View Month
+                    </a>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>

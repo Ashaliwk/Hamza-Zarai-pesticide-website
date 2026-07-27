@@ -6,26 +6,42 @@ require_login();
 $pageTitle = 'Sales';
 $activeNav = 'sales';
 
-$search = trim($_GET['search'] ?? '');
+$currentMonthKey = date('Y-m');
+$selectedMonth   = trim($_GET['month'] ?? $currentMonthKey);
+$search          = trim($_GET['search'] ?? '');
 
 $products = $pdo->query("SELECT id, name, selling_price, quantity, unit FROM products ORDER BY name")->fetchAll();
 
-if ($search !== '') {
-    $stmt = $pdo->prepare("
-        SELECT s.*, p.name AS product_name, p.unit AS product_unit
-        FROM sales s JOIN products p ON p.id = s.product_id
-        WHERE p.name LIKE :s OR s.customer_name LIKE :s OR s.sale_date LIKE :s OR s.payment_status LIKE :s
-        ORDER BY s.sale_date DESC, s.id DESC
-    ");
-    $stmt->execute([':s' => "%$search%"]);
-    $sales = $stmt->fetchAll();
-} else {
-    $sales = $pdo->query("
-        SELECT s.*, p.name AS product_name, p.unit AS product_unit
-        FROM sales s JOIN products p ON p.id = s.product_id
-        ORDER BY s.sale_date DESC, s.id DESC
-    ")->fetchAll();
+// Available months from sales table
+$availableMonths = $pdo->query("
+    SELECT DISTINCT DATE_FORMAT(sale_date, '%Y-%m') AS month_key, DATE_FORMAT(sale_date, '%M %Y') AS month_name
+    FROM sales
+    ORDER BY month_key DESC
+")->fetchAll();
+
+$whereConditions = [];
+$params = [];
+
+if ($selectedMonth !== 'all') {
+    $whereConditions[] = "DATE_FORMAT(s.sale_date, '%Y-%m') = :month";
+    $params[':month'] = $selectedMonth;
 }
+
+if ($search !== '') {
+    $whereConditions[] = "(p.name LIKE :search OR s.customer_name LIKE :search OR s.sale_date LIKE :search OR s.payment_status LIKE :search)";
+    $params[':search'] = "%$search%";
+}
+
+$whereSql = count($whereConditions) > 0 ? "WHERE " . implode(' AND ', $whereConditions) : "";
+
+$stmt = $pdo->prepare("
+    SELECT s.*, p.name AS product_name, p.unit AS product_unit
+    FROM sales s JOIN products p ON p.id = s.product_id
+    {$whereSql}
+    ORDER BY s.sale_date DESC, s.id DESC
+");
+$stmt->execute($params);
+$sales = $stmt->fetchAll();
 
 $company = $_SESSION['company_name'] ?? 'Hamza Zarai Corporation';
 
@@ -39,20 +55,65 @@ foreach ($sales as $s) {
     $totalAmountDue   += (float)($s['due_amount'] ?? 0.00);
 }
 
+// Disciplined Monthly Sales Archive (sales of all months formatted)
+$monthlySalesArchive = $pdo->query("
+    SELECT 
+        DATE_FORMAT(s.sale_date, '%Y-%m') AS month_key,
+        DATE_FORMAT(s.sale_date, '%M %Y') AS month_name,
+        COUNT(s.id) AS total_orders,
+        COALESCE(SUM(s.quantity), 0) AS total_units,
+        COALESCE(SUM(s.total), 0) AS total_sales,
+        COALESCE(SUM(s.paid_amount), 0) AS total_paid,
+        COALESCE(SUM(s.due_amount), 0) AS total_due,
+        COALESCE(SUM((s.price_per_unit - p.purchase_price) * s.quantity), 0) AS total_profit
+    FROM sales s
+    LEFT JOIN products p ON p.id = s.product_id
+    GROUP BY month_key, month_name
+    ORDER BY month_key DESC
+")->fetchAll();
+
 require_once 'includes/header.php';
 ?>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
-<div class="d-flex justify-content-between align-items-start mb-3">
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
   <div>
-    <h1 class="page-title">Sales</h1>
-    <p class="page-subtitle">Track your sales transactions & payment dues</p>
+    <h1 class="page-title mb-1">Sales</h1>
+    <p class="page-subtitle mb-0">Track monthly sales performance & payment dues</p>
   </div>
-  <button class="btn btn-brand fw-semibold" data-bs-toggle="modal" data-bs-target="#addSaleModal">
-    <i class="fa-solid fa-plus me-1"></i> Record Sale
-  </button>
+  <div class="d-flex align-items-center gap-2">
+    <form method="GET" action="sales.php" id="monthFilterForm" class="d-flex align-items-center gap-2">
+      <?php if ($search !== ''): ?>
+        <input type="hidden" name="search" value="<?= e($search) ?>">
+      <?php endif; ?>
+      <div class="bg-white border rounded-3 px-2 py-1 shadow-sm d-flex align-items-center gap-2">
+        <i class="fa-solid fa-calendar-days text-success ms-1"></i>
+        <span class="small fw-bold text-muted">Period:</span>
+        <select name="month" id="monthSelect" class="form-select form-select-sm border-0 fw-bold text-dark shadow-none" onchange="this.form.submit()" style="cursor:pointer; min-width: 170px; background-color: transparent;">
+          <option value="<?= $currentMonthKey ?>" <?= $selectedMonth === $currentMonthKey ? 'selected' : '' ?>>Current Month (<?= date('F Y') ?>)</option>
+          <option value="all" <?= $selectedMonth === 'all' ? 'selected' : '' ?>>All Time (All Months)</option>
+          <?php foreach ($availableMonths as $m): ?>
+            <?php if ($m['month_key'] !== $currentMonthKey): ?>
+              <option value="<?= $m['month_key'] ?>" <?= $selectedMonth === $m['month_key'] ? 'selected' : '' ?>>
+                <?= e($m['month_name']) ?>
+              </option>
+            <?php endif; ?>
+          <?php endforeach; ?>
+        </select>
+      </div>
+    </form>
+    <button class="btn btn-brand fw-semibold ms-1" data-bs-toggle="modal" data-bs-target="#addSaleModal">
+      <i class="fa-solid fa-plus me-1"></i> Record Sale
+    </button>
+  </div>
 </div>
+
+<?php
+  $periodLabel = ($selectedMonth === 'all') 
+    ? 'All Time' 
+    : date('F Y', strtotime($selectedMonth . '-01'));
+?>
 
 <!-- Financial Summary Cards -->
 <div class="row g-3 mb-4">
@@ -60,8 +121,11 @@ require_once 'includes/header.php';
     <div class="stat-card d-flex align-items-center gap-3">
       <div class="stat-icon icon-green"><i class="fa-solid fa-chart-line"></i></div>
       <div>
-        <div class="stat-label">Total Sales Volume</div>
+        <div class="stat-label">Total Sales Volume (<?= e($periodLabel) ?>)</div>
         <div class="stat-value text-dark"><?= money($totalSalesVolume) ?></div>
+        <div class="text-muted small mt-1" style="font-size:0.75rem;">
+          <i class="fa-solid fa-rotate-left text-success me-1"></i>Resets every new month
+        </div>
       </div>
     </div>
   </div>
@@ -69,8 +133,11 @@ require_once 'includes/header.php';
     <div class="stat-card d-flex align-items-center gap-3">
       <div class="stat-icon icon-blue"><i class="fa-solid fa-wallet"></i></div>
       <div>
-        <div class="stat-label">Total Amount Paid</div>
+        <div class="stat-label">Total Amount Paid (<?= e($periodLabel) ?>)</div>
         <div class="stat-value text-success"><?= money($totalAmountPaid) ?></div>
+        <div class="text-muted small mt-1" style="font-size:0.75rem;">
+          Collected revenue
+        </div>
       </div>
     </div>
   </div>
@@ -78,8 +145,11 @@ require_once 'includes/header.php';
     <div class="stat-card d-flex align-items-center gap-3">
       <div class="stat-icon icon-orange"><i class="fa-solid fa-clock-rotate-left"></i></div>
       <div>
-        <div class="stat-label">Total Outstanding Due</div>
+        <div class="stat-label">Total Outstanding Due (<?= e($periodLabel) ?>)</div>
         <div class="stat-value <?= $totalAmountDue > 0 ? 'text-danger' : 'text-muted' ?>"><?= money($totalAmountDue) ?></div>
+        <div class="text-muted small mt-1" style="font-size:0.75rem;">
+          Pending customer balances
+        </div>
       </div>
     </div>
   </div>
@@ -191,6 +261,81 @@ require_once 'includes/header.php';
       <?php endforeach; ?>
     </tbody>
   </table>
+  </div>
+</div>
+
+<!-- Disciplined Monthly Sales Archive & Breakdown Table -->
+<div class="panel mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h5 class="panel-title mb-1 d-flex align-items-center gap-2">
+        <i class="fa-solid fa-boxes-stacked text-success"></i> Monthly Sales Archive & Breakdown
+      </h5>
+      <p class="text-muted small mb-0">Disciplined historical log of all monthly sales volumes, collections, dues, and profits</p>
+    </div>
+    <?php if ($selectedMonth !== 'all'): ?>
+      <a href="sales.php?month=all" class="btn btn-sm btn-light border fw-semibold">
+        <i class="fa-solid fa-globe me-1"></i> View All Months
+      </a>
+    <?php endif; ?>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-clean align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Month & Year</th>
+          <th>Total Orders</th>
+          <th>Units Sold</th>
+          <th>Total Sales Volume</th>
+          <th>Amount Paid</th>
+          <th>Outstanding Due</th>
+          <th>Est. Profit</th>
+          <th class="text-end">Filter Scope</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php if (!$monthlySalesArchive): ?>
+          <tr><td colspan="8" class="text-center text-muted py-4">No monthly sales records logged.</td></tr>
+        <?php else: ?>
+          <?php foreach ($monthlySalesArchive as $ma): 
+            $isCurrent = ($ma['month_key'] === $currentMonthKey);
+            $isSelected = ($ma['month_key'] === $selectedMonth);
+          ?>
+            <tr class="<?= $isSelected ? 'table-success-subtle' : '' ?>">
+              <td>
+                <div class="fw-bold text-dark d-flex align-items-center gap-2">
+                  <?= e($ma['month_name']) ?>
+                  <?php if ($isCurrent): ?>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-0.5" style="font-size:0.7rem;">Active Month</span>
+                  <?php endif; ?>
+                  <?php if ($isSelected): ?>
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-0.5" style="font-size:0.7rem;">Selected View</span>
+                  <?php endif; ?>
+                </div>
+                <div class="text-muted small"><?= e($ma['month_key']) ?></div>
+              </td>
+              <td class="fw-semibold text-dark"><?= (int)$ma['total_orders'] ?> order<?= (int)$ma['total_orders'] === 1 ? '' : 's' ?></td>
+              <td class="fw-semibold"><?= rtrim(rtrim(number_format($ma['total_units'], 2), '0'), '.') ?></td>
+              <td class="fw-bold text-dark"><?= money($ma['total_sales']) ?></td>
+              <td class="text-success fw-semibold"><?= money($ma['total_paid']) ?></td>
+              <td>
+                <?php if ((float)$ma['total_due'] > 0): ?>
+                  <span class="text-danger fw-bold"><?= money($ma['total_due']) ?></span>
+                <?php else: ?>
+                  <span class="text-muted">Rs 0.00</span>
+                <?php endif; ?>
+              </td>
+              <td class="fw-bold text-primary"><?= money($ma['total_profit']) ?></td>
+              <td class="text-end">
+                <a href="sales.php?month=<?= e($ma['month_key']) ?>" class="btn btn-sm <?= $isSelected ? 'btn-brand' : 'btn-light border text-muted' ?> fw-semibold">
+                  <i class="fa-solid fa-filter me-1"></i> Filter Records
+                </a>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+        <?php endif; ?>
+      </tbody>
+    </table>
   </div>
 </div>
 

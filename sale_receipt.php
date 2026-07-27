@@ -92,7 +92,7 @@ $dueAmount     = (float)($sale['due_amount'] ?? 0.00);
         <span style="font-size: 2.2rem;">🌱</span>
         <h2 class="fw-bold mb-0" style="color: #14532d; letter-spacing: -0.5px;">Hamza Zarai Corporation</h2>
       </div>
-      <p class="text-muted small mb-1"><i class="fa-solid fa-location-dot me-1"></i> Norpur, Pakistan</p>
+      <p class="text-muted small mb-1"><i class="fa-solid fa-location-dot me-1"></i>Ada Norpur, Pakistan</p>
       <p class="text-muted small mb-0"><i class="fa-solid fa-phone me-1"></i> Contact: +92 300 6901657 | Info@zarai.com</p>
     </div>
     <div class="text-end">
